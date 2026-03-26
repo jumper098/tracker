@@ -53,7 +53,7 @@ function useLiveTournamentSync(activeTournament, setActiveTournament, setView, c
       id: 'current',
       data: { tournament: activeTournament, level: currentLevel, timeLeft, paused },
       updated_at: new Date().toISOString(),
-    }).then(() => {})
+    }, { onConflict: 'id' }).then(() => {})
   }, [JSON.stringify(activeTournament?.players), currentLevel, Math.floor(timeLeft / 10)])
 }
 
@@ -268,7 +268,8 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     }])
     if (error) { showToast('Fehler: ' + error.message); return }
     // Clear live tournament from DB
-    await db.from('live_tournament').delete().eq('id', 'current')
+    const { error: delError } = await db.from('live_tournament').delete().eq('id', 'current')
+    if (delError) console.warn('Could not clear live tournament:', delError.message)
     showToast('✓ Turnier gespeichert!')
     setActiveTournament(null)
     setView('create')
