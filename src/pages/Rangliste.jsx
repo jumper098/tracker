@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatEuro, formatEuroSign, profitClass } from '../lib/helpers'
+import { formatEuro, formatEuroSign, formatDate, profitClass } from '../lib/helpers'
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
@@ -91,24 +91,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
         ))}
       </div>
 
-      {/* Sort mode */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-        {[
-          { id: 'profit', label: '€ Profit' },
-          { id: 'winrate', label: '% Winrate' },
-          { id: 'sessions', label: '# Sessions' },
-        ].map(m => (
-          <button key={m.id} onClick={() => setSortMode(m.id)} className="btn-ghost"
-            style={{
-              background: sortMode === m.id ? 'rgba(201,168,76,0.2)' : undefined,
-              borderColor: sortMode === m.id ? 'rgba(201,168,76,0.5)' : undefined,
-              color: sortMode === m.id ? 'var(--gold-light)' : undefined,
-              fontSize: '0.65rem',
-            }}>
-            {m.label}
-          </button>
-        ))}
-      </div>
+
 
       {/* Leaderboard */}
       {sorted.length === 0 && <div className="empty-state">Noch keine Daten ♠</div>}
