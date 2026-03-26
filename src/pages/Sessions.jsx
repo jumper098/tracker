@@ -23,9 +23,9 @@ export default function Sessions({ sessions, onRefresh }) {
   const years = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
   const filteredDates = yearFilter === 'all' ? sortedDates : sortedDates.filter(d => d.startsWith(yearFilter))
 
-  // Quick stats
+  // Stats
   const totalNights = filteredDates.length
-  const totalSessions = filteredDates.reduce((s, d) => s + byDate[d].length, 0)
+  const totalPot = filteredDates.reduce((sum, d) => sum + byDate[d].reduce((s, e) => s + e.buy_in, 0), 0)
 
   function toggleNight(date) {
     setOpenNights(prev => ({ ...prev, [date]: !prev[date] }))
@@ -61,7 +61,8 @@ export default function Sessions({ sessions, onRefresh }) {
     })
   }
 
-  const settlement = settlementNight ? calcSettlement(byDate[settlementNight]) : []
+  const settlementResult = settlementNight ? calcSettlement(byDate[settlementNight]) : null
+  const settlement = settlementResult?.transfers || []
 
   return (
     <div style={{ padding: '20px 16px 100px' }}>
@@ -74,15 +75,14 @@ export default function Sessions({ sessions, onRefresh }) {
 
       {/* Quick stats */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
-        {[
-          { label: 'Spielabende', value: totalNights },
-          { label: 'Einträge', value: totalSessions },
-        ].map(s => (
-          <div key={s.label} className="card" style={{ padding: '14px', textAlign: 'center' }}>
-            <div className="font-display" style={{ fontSize: '1.4rem', color: 'var(--gold)' }}>{s.value}</div>
-            <div className="section-label" style={{ marginBottom: 0 }}>{s.label}</div>
-          </div>
-        ))}
+        <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+          <div className="font-display" style={{ fontSize: '1.4rem', color: 'var(--gold)' }}>{totalNights}</div>
+          <div className="section-label" style={{ marginBottom: 0 }}>Spielabende</div>
+        </div>
+        <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
+          <div className="font-display" style={{ fontSize: '1.1rem', color: 'var(--gold)' }}>{formatEuro(totalPot)}</div>
+          <div className="section-label" style={{ marginBottom: 0 }}>Pot Total</div>
+        </div>
       </div>
 
       {/* Year filter */}
@@ -116,13 +116,7 @@ export default function Sessions({ sessions, onRefresh }) {
             {/* Night header */}
             <div
               onClick={() => toggleNight(date)}
-              style={{
-                padding: '16px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
+              style={{ padding: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
             >
               <div>
                 <div className="font-display" style={{ fontSize: '0.85rem', color: 'var(--gold)', letterSpacing: '0.1em' }}>
@@ -154,11 +148,8 @@ export default function Sessions({ sessions, onRefresh }) {
                     const profit = s.cash_out - s.buy_in
                     return (
                       <div key={s.id} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 0',
-                        borderBottom: '1px solid rgba(255,255,255,0.04)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
                       }}>
                         <div>
                           <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{s.player_name}</div>
@@ -177,7 +168,6 @@ export default function Sessions({ sessions, onRefresh }) {
                       </div>
                     )
                   })}
-
                 <button
                   className="btn-danger"
                   style={{ marginTop: '12px', width: '100%' }}
@@ -194,22 +184,29 @@ export default function Sessions({ sessions, onRefresh }) {
       {/* Settlement modal */}
       {settlementNight && (
         <div style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.8)',
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 400, padding: '20px',
         }} onClick={() => setSettlementNight(null)}>
           <div className="card" style={{ maxWidth: '400px', width: '100%', padding: '24px' }}
             onClick={e => e.stopPropagation()}>
-            <div className="font-display" style={{
-              fontSize: '0.9rem', color: 'var(--gold)',
-              letterSpacing: '0.12em', marginBottom: '6px',
-            }}>
+            <div className="font-display" style={{ fontSize: '0.9rem', color: 'var(--gold)', letterSpacing: '0.12em', marginBottom: '4px' }}>
               💸 SCHULDENAUSGLEICH
             </div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
               {formatDate(settlementNight)} — minimale Überweisungen
             </div>
+
+            {/* Adjustment notice */}
+            {settlementResult?.adjustmentNote && (
+              <div style={{
+                background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.25)',
+                borderRadius: '8px', padding: '10px 12px', marginBottom: '16px',
+                fontSize: '0.78rem', color: 'var(--gold-light)',
+              }}>
+                ⚠ {settlementResult.adjustmentNote}
+              </div>
+            )}
 
             {settlement.length === 0 ? (
               <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px 0' }}>

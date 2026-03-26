@@ -1,17 +1,43 @@
 /**
- * Calculates the minimum number of transfers to settle debts for a poker night.
- * Returns array of { from, to, amount }
+ * Calculates fair settlement for a poker night.
+ * 
+ * Handles two edge cases:
+ * 1. Total profits > total buy-ins → proportionally reduce winnings
+ * 2. Total profits < total buy-ins → reduce each loser's debt proportionally
  */
 export function calcSettlement(nightSessions) {
-  const balances = {}
+  const totalBuyins = nightSessions.reduce((s, e) => s + e.buy_in, 0)
+
+  // Raw profits per player
+  const rawProfits = {}
   nightSessions.forEach(s => {
-    const profit = s.cash_out - s.buy_in
-    balances[s.player_name] = (balances[s.player_name] || 0) + profit
+    rawProfits[s.player_name] = (rawProfits[s.player_name] || 0) + (s.cash_out - s.buy_in)
   })
 
+  const totalWinnings = Object.values(rawProfits).filter(p => p > 0).reduce((s, p) => s + p, 0)
+  const totalLosses   = Object.values(rawProfits).filter(p => p < 0).reduce((s, p) => s + Math.abs(p), 0)
+
+  const adjusted = { ...rawProfits }
+
+  if (totalWinnings > totalBuyins && totalWinnings > 0) {
+    // Case 1: Too much won — scale down winners proportionally
+    const factor = totalBuyins / totalWinnings
+    Object.keys(adjusted).forEach(name => {
+      if (adjusted[name] > 0) adjusted[name] = Math.round(adjusted[name] * factor * 100) / 100
+    })
+  } else if (totalLosses > totalWinnings && totalLosses > 0) {
+    // Case 2: Too little won — reduce each loser's debt proportionally
+    const missing = totalLosses - totalWinnings
+    const factor = totalWinnings / totalLosses // scale down losses
+    Object.keys(adjusted).forEach(name => {
+      if (adjusted[name] < 0) adjusted[name] = Math.round(adjusted[name] * factor * 100) / 100
+    })
+  }
+
+  // Now calculate minimum transfers
   const creditors = []
   const debtors = []
-  Object.entries(balances).forEach(([name, bal]) => {
+  Object.entries(adjusted).forEach(([name, bal]) => {
     const rounded = Math.round(bal * 100) / 100
     if (rounded > 0.005) creditors.push({ name, amount: rounded })
     else if (rounded < -0.005) debtors.push({ name, amount: -rounded })
@@ -32,5 +58,14 @@ export function calcSettlement(nightSessions) {
     if (c.amount < 0.005) ci++
     if (d.amount < 0.005) di++
   }
-  return transfers
+
+  // Info about adjustments
+  const wasAdjusted = totalWinnings !== totalLosses
+  const adjustmentNote = totalWinnings > totalBuyins
+    ? `Gewinne wurden von ${totalWinnings.toFixed(2)}€ auf ${totalBuyins.toFixed(2)}€ gekürzt`
+    : totalLosses > totalWinnings
+    ? `Verluste wurden um ${(totalLosses - totalWinnings).toFixed(2)}€ reduziert`
+    : null
+
+  return { transfers, wasAdjusted, adjustmentNote }
 }
