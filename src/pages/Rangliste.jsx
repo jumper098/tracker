@@ -59,6 +59,9 @@ export default function Rangliste({ sessions, avatars = {} }) {
     const byDate = {}
     sessions.forEach(s => { if (!byDate[s.date]) byDate[s.date] = {}; byDate[s.date][s.player_name] = s })
     let winsA = 0, winsB = 0, draws = 0
+
+    // Shared sessions only
+    const sharedSessions = { A: [], B: [] }
     Object.values(byDate).forEach(night => {
       const a = night[nameA], b = night[nameB]
       if (!a || !b) return
@@ -66,8 +69,46 @@ export default function Rangliste({ sessions, avatars = {} }) {
       if (profA > profB) winsA++
       else if (profB > profA) winsB++
       else draws++
+      sharedSessions.A.push(a)
+      sharedSessions.B.push(b)
     })
-    return { winsA, winsB, draws, total: winsA + winsB + draws }
+
+    // Build stats for each player from shared sessions only
+    function buildStats(sessions) {
+      const s = { profit: 0, wins: 0, losses: 0, buyin: 0, rebuys: 0,
+        bestWin: -Infinity, bestWinDate: null, worstLoss: Infinity, worstLossDate: null }
+      sessions.forEach(sess => {
+        const profit = sess.cash_out - sess.buy_in
+        s.profit += profit
+        s.buyin += sess.buy_in
+        s.rebuys += (sess.rebuy_count || 0)
+        if (profit > 0) s.wins++
+        if (profit < 0) s.losses++
+        if (profit > s.bestWin) { s.bestWin = profit; s.bestWinDate = sess.date }
+        if (profit < s.worstLoss) { s.worstLoss = profit; s.worstLossDate = sess.date }
+      })
+      const total = sessions.length
+      s.winRate = total > 0 ? (s.wins / total * 100) : 0
+      s.avgProfit = total > 0 ? s.profit / total : 0
+      // Streaks
+      const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date))
+      let curW = 0, maxW = 0, curL = 0, maxL = 0
+      sorted.forEach(sess => {
+        const profit = sess.cash_out - sess.buy_in
+        if (profit > 0) { curW++; maxW = Math.max(maxW, curW); curL = 0 }
+        else if (profit < 0) { curL++; maxL = Math.max(maxL, curL); curW = 0 }
+        else { curW = 0; curL = 0 }
+      })
+      s.longestWinStreak = maxW
+      s.longestLossStreak = maxL
+      return s
+    }
+
+    return {
+      winsA, winsB, draws, total: winsA + winsB + draws,
+      statsA: buildStats(sharedSessions.A),
+      statsB: buildStats(sharedSessions.B),
+    }
   }
 
   const h2h = (h2hA && h2hB && h2hA !== h2hB) ? calcH2H(h2hA, h2hB) : null
@@ -211,15 +252,16 @@ export default function Rangliste({ sessions, avatars = {} }) {
 
             {h2h && (
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '12px', alignItems: 'center', textAlign: 'center', marginBottom: '16px' }}>
+                {/* Header with avatars and wins */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '12px', alignItems: 'center', textAlign: 'center', marginBottom: '12px' }}>
                   <div>
                     {avatars[h2hA] ? (
-                      <img src={avatars[h2hA]} alt={h2hA} style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(201,168,76,0.4)', margin: '0 auto 6px' }} />
+                      <img src={avatars[h2hA]} alt={h2hA} style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(74,222,128,0.5)', margin: '0 auto 6px', display: 'block' }} />
                     ) : (
-                      <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(201,168,76,0.1)', border: '1px dashed rgba(201,168,76,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', margin: '0 auto 6px' }}>👤</div>
+                      <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(74,222,128,0.08)', border: '1px dashed rgba(74,222,128,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', margin: '0 auto 6px' }}>👤</div>
                     )}
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>{h2hA}</div>
-                    <div className="font-display profit-pos" style={{ fontSize: '2rem' }}>{h2h.winsA}</div>
+                    <div className="font-display" style={{ fontSize: '2rem', color: '#4ade80' }}>{h2h.winsA}</div>
                   </div>
                   <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                     VS<br />
@@ -227,25 +269,84 @@ export default function Rangliste({ sessions, avatars = {} }) {
                   </div>
                   <div>
                     {avatars[h2hB] ? (
-                      <img src={avatars[h2hB]} alt={h2hB} style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(201,168,76,0.4)', margin: '0 auto 6px' }} />
+                      <img src={avatars[h2hB]} alt={h2hB} style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(96,165,250,0.5)', margin: '0 auto 6px', display: 'block' }} />
                     ) : (
-                      <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(201,168,76,0.1)', border: '1px dashed rgba(201,168,76,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', margin: '0 auto 6px' }}>👤</div>
+                      <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(96,165,250,0.08)', border: '1px dashed rgba(96,165,250,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', margin: '0 auto 6px' }}>👤</div>
                     )}
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>{h2hB}</div>
-                    <div className="font-display profit-pos" style={{ fontSize: '2rem' }}>{h2h.winsB}</div>
+                    <div className="font-display" style={{ fontSize: '2rem', color: '#60a5fa' }}>{h2h.winsB}</div>
                   </div>
                 </div>
+
+                {/* Win bar */}
                 {h2h.total > 0 && (
-                  <div style={{ marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', height: '10px' }}>
+                  <div style={{ marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', height: '8px' }}>
                       <div style={{ flex: h2h.winsA, background: '#4ade80' }} />
                       <div style={{ flex: h2h.draws, background: 'rgba(255,255,255,0.15)' }} />
                       <div style={{ flex: h2h.winsB, background: '#60a5fa' }} />
                     </div>
                   </div>
                 )}
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '16px' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '16px' }}>
                   {h2h.total} gemeinsame Spielabende
+                </div>
+
+                {/* Stats comparison — only from shared sessions */}
+                {[
+                  { label: 'Profit', a: formatEuroSign(h2h.statsA.profit), b: formatEuroSign(h2h.statsB.profit), aVal: h2h.statsA.profit, bVal: h2h.statsB.profit },
+                  { label: 'Ø Profit', a: formatEuroSign(h2h.statsA.avgProfit), b: formatEuroSign(h2h.statsB.avgProfit), aVal: h2h.statsA.avgProfit, bVal: h2h.statsB.avgProfit },
+                  { label: 'Winrate', a: h2h.statsA.winRate.toFixed(0)+'%', b: h2h.statsB.winRate.toFixed(0)+'%', aVal: h2h.statsA.winRate, bVal: h2h.statsB.winRate },
+                  { label: 'Siege', a: h2h.statsA.wins, b: h2h.statsB.wins, aVal: h2h.statsA.wins, bVal: h2h.statsB.wins },
+                  { label: 'Niederlagen', a: h2h.statsA.losses, b: h2h.statsB.losses, aVal: h2h.statsA.losses, bVal: h2h.statsB.losses, lowerBetter: true },
+                  { label: 'Rebuys', a: h2h.statsA.rebuys, b: h2h.statsB.rebuys, aVal: h2h.statsA.rebuys, bVal: h2h.statsB.rebuys, lowerBetter: true },
+                  { label: 'Buy-In Total', a: formatEuro(h2h.statsA.buyin), b: formatEuro(h2h.statsB.buyin), aVal: null, bVal: null },
+                  { label: 'Win Streak 🔥', a: h2h.statsA.longestWinStreak+'×', b: h2h.statsB.longestWinStreak+'×', aVal: h2h.statsA.longestWinStreak, bVal: h2h.statsB.longestWinStreak },
+                  { label: 'Loss Streak 💀', a: h2h.statsA.longestLossStreak+'×', b: h2h.statsB.longestLossStreak+'×', aVal: h2h.statsA.longestLossStreak, bVal: h2h.statsB.longestLossStreak, lowerBetter: true },
+                ].map(row => {
+                  const aWins = row.aVal !== null && (row.lowerBetter ? row.aVal < row.bVal : row.aVal > row.bVal)
+                  const bWins = row.aVal !== null && (row.lowerBetter ? row.bVal < row.aVal : row.bVal > row.aVal)
+                  return (
+                    <div key={row.label} style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
+                      <div style={{ textAlign: 'right', fontFamily: 'Cinzel, serif', fontSize: '0.82rem', color: aWins ? '#4ade80' : 'var(--text-primary)', fontWeight: aWins ? 700 : 400 }}>
+                        {row.a}{aWins ? ' ✓' : ''}
+                      </div>
+                      <div style={{ textAlign: 'center', fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.06em', minWidth: '60px' }}>{row.label}</div>
+                      <div style={{ textAlign: 'left', fontFamily: 'Cinzel, serif', fontSize: '0.82rem', color: bWins ? '#60a5fa' : 'var(--text-primary)', fontWeight: bWins ? 700 : 400 }}>
+                        {bWins ? '✓ ' : ''}{row.b}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Beste / Schlechteste Sessions */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '12px' }}>
+                  <div style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.15)', borderRadius: '8px', padding: '8px 10px' }}>
+                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', marginBottom: '6px' }}>BESTE SESSION</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                      <div>
+                        <div className="profit-pos" style={{ fontFamily: 'Cinzel, serif' }}>{h2h.statsA.bestWin !== -Infinity ? formatEuroSign(h2h.statsA.bestWin) : '—'}</div>
+                        {h2h.statsA.bestWinDate && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{formatDate(h2h.statsA.bestWinDate)}</div>}
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div className="profit-pos" style={{ fontFamily: 'Cinzel, serif' }}>{h2h.statsB.bestWin !== -Infinity ? formatEuroSign(h2h.statsB.bestWin) : '—'}</div>
+                        {h2h.statsB.bestWinDate && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{formatDate(h2h.statsB.bestWinDate)}</div>}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: '8px', padding: '8px 10px' }}>
+                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', marginBottom: '6px' }}>SCHLECHTESTE</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                      <div>
+                        <div className="profit-neg" style={{ fontFamily: 'Cinzel, serif' }}>{h2h.statsA.worstLoss !== Infinity ? formatEuroSign(h2h.statsA.worstLoss) : '—'}</div>
+                        {h2h.statsA.worstLossDate && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{formatDate(h2h.statsA.worstLossDate)}</div>}
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div className="profit-neg" style={{ fontFamily: 'Cinzel, serif' }}>{h2h.statsB.worstLoss !== Infinity ? formatEuroSign(h2h.statsB.worstLoss) : '—'}</div>
+                        {h2h.statsB.worstLossDate && <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{formatDate(h2h.statsB.worstLossDate)}</div>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
