@@ -3,6 +3,11 @@ import { formatEuro, formatEuroSign, profitClass } from '../lib/helpers'
 
 export default function Rangliste({ sessions, avatars = {} }) {
   const [yearFilter, setYearFilter] = useState('all')
+  const [expanded, setExpanded] = useState({})
+
+  function toggleExpand(name) {
+    setExpanded(prev => ({ ...prev, [name]: !prev[name] }))
+  }
   const [sortMode, setSortMode] = useState('profit')
   const [h2hA, setH2hA] = useState('')
   const [h2hB, setH2hB] = useState('')
@@ -111,33 +116,34 @@ export default function Rangliste({ sessions, avatars = {} }) {
       {/* Leaderboard */}
       {sorted.length === 0 && <div className="empty-state">Noch keine Daten ♠</div>}
 
-      {sorted.map((p, i) => (
-        <div key={p.name} className="card" style={{ marginBottom: '10px', padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ fontSize: i < 3 ? '1.5rem' : '1rem', minWidth: '28px', textAlign: 'center' }}>
+      {sorted.map((p, i) => {
+        const isOpen = expanded[p.name]
+        return (
+        <div key={p.name} className="card" style={{ marginBottom: '10px', padding: '0', cursor: 'pointer' }}
+          onClick={() => toggleExpand(p.name)}>
+
+          {/* Always visible row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px' }}>
+            <div style={{ fontSize: i < 3 ? '1.4rem' : '0.9rem', minWidth: '28px', textAlign: 'center', flexShrink: 0 }}>
               {i < 3 ? MEDALS[i] : `#${i + 1}`}
             </div>
             {avatars[p.name] ? (
               <img src={avatars[p.name]} alt={p.name} style={{
-                width: '40px', height: '40px', borderRadius: '50%',
+                width: '42px', height: '42px', borderRadius: '50%',
                 objectFit: 'cover', border: '2px solid rgba(201,168,76,0.35)', flexShrink: 0,
               }} />
             ) : (
               <div style={{
-                width: '40px', height: '40px', borderRadius: '50%',
+                width: '42px', height: '42px', borderRadius: '50%',
                 background: 'rgba(201,168,76,0.08)', border: '1px dashed rgba(201,168,76,0.25)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.1rem', flexShrink: 0,
+                fontSize: '1.2rem', flexShrink: 0,
               }}>👤</div>
             )}
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: '1rem' }}>{p.name}</div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                {p.sessions} Sessions · {p.wins}W / {p.losses}L · {p.winRate.toFixed(0)}% WR
-                {p.rebuys > 0 && ` · ${p.rebuys} Rebuys`}
-              </div>
             </div>
-            <div style={{ textAlign: 'right' }}>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div className={`font-display ${profitClass(p.profit)}`} style={{ fontSize: '1rem' }}>
                 {formatEuroSign(p.profit)}
               </div>
@@ -145,17 +151,56 @@ export default function Rangliste({ sessions, avatars = {} }) {
                 Ø {formatEuroSign(p.avgProfit)}
               </div>
             </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '4px' }}>
+              {isOpen ? '▲' : '▼'}
+            </div>
           </div>
 
-          {/* Mini bar chart */}
-          {p.sessions > 0 && (
-            <div style={{ marginTop: '10px', display: 'flex', gap: '4px', alignItems: 'flex-end', height: '20px' }}>
-              <div style={{ flex: p.wins, background: '#4ade80', borderRadius: '3px', minWidth: p.wins ? 4 : 0, opacity: 0.7 }} />
-              <div style={{ flex: p.losses, background: '#f87171', borderRadius: '3px', minWidth: p.losses ? 4 : 0, opacity: 0.7 }} />
-              <div style={{ flex: p.sessions - p.wins - p.losses, background: 'var(--text-muted)', borderRadius: '3px', minWidth: 0, opacity: 0.4 }} />
+          {/* Expanded stats */}
+          {isOpen && (
+            <div style={{ borderTop: '1px solid rgba(201,168,76,0.1)', padding: '14px 16px' }}
+              onClick={e => e.stopPropagation()}>
+
+              {/* Stats grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '14px' }}>
+                {[
+                  { label: 'Sessions', value: p.sessions },
+                  { label: 'Siege', value: p.wins },
+                  { label: 'Niederlagen', value: p.losses },
+                  { label: 'Winrate', value: p.winRate.toFixed(0) + '%' },
+                  { label: 'Rebuys', value: p.rebuys },
+                  { label: 'Best Win', value: p.bestWin !== -Infinity ? formatEuroSign(p.bestWin) : '—' },
+                ].map(s => (
+                  <div key={s.label} style={{
+                    background: 'rgba(0,0,0,0.2)', borderRadius: '8px',
+                    padding: '10px 8px', textAlign: 'center',
+                    border: '1px solid rgba(255,255,255,0.04)',
+                  }}>
+                    <div className="font-display" style={{ fontSize: '0.9rem', color: 'var(--gold)' }}>{s.value}</div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em' }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Win/Loss bar */}
+              {p.sessions > 0 && (
+                <div>
+                  <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', height: '8px', marginBottom: '4px' }}>
+                    <div style={{ flex: p.wins, background: '#4ade80', opacity: 0.8 }} />
+                    <div style={{ flex: p.losses, background: '#f87171', opacity: 0.8 }} />
+                    <div style={{ flex: p.sessions - p.wins - p.losses, background: 'var(--text-muted)', opacity: 0.3 }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                    <span style={{ color: '#4ade80' }}>✓ {p.wins} Siege</span>
+                    <span style={{ color: '#f87171' }}>✗ {p.losses} Niederl.</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
+        )
+      }
       ))}
 
       {/* Head-to-Head */}
