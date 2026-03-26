@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { db } from '../lib/supabase'
 import { formatDate, formatEuro, formatEuroSign, profitClass } from '../lib/helpers'
 import { calcSettlement } from '../lib/settlement'
@@ -10,6 +10,9 @@ export default function Sessions({ sessions, onRefresh }) {
   const [settlementNight, setSettlementNight] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [yearFilter, setYearFilter] = useState('all')
+  const [photos, setPhotos] = useState({}) // date -> url
+  const [lightbox, setLightbox] = useState(null)
+  const fileInputRefs = useRef({})
 
   // Group sessions by date
   const byDate = {}
@@ -26,6 +29,49 @@ export default function Sessions({ sessions, onRefresh }) {
   // Stats
   const totalNights = filteredDates.length
   const totalPot = filteredDates.reduce((sum, d) => sum + byDate[d].reduce((s, e) => s + e.buy_in, 0), 0)
+
+  // Load all photos on mount
+  useEffect(() => {
+    loadPhotos()
+  }, [])
+
+  async function loadPhotos() {
+    const { data: files, error } = await db.storage.from('poker-photos').list('nights')
+    if (error || !files) return
+    const newPhotos = {}
+    files.forEach(file => {
+      const date = file.name.replace(/\.[^.]+$/, '')
+      const { data } = db.storage.from('poker-photos').getPublicUrl('nights/' + file.name)
+      newPhotos[date] = data.publicUrl
+    })
+    setPhotos(newPhotos)
+  }
+
+  async function handlePhotoUpload(e, date) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) { showToast('⚠ Foto zu groß (max. 10 MB)'); return }
+
+    showToast('📷 Foto wird hochgeladen…')
+    const ext = file.name.split('.').pop() || 'jpg'
+    const path = `nights/${date}.${ext}`
+
+    const { error } = await db.storage.from('poker-photos').upload(path, file, { upsert: true, contentType: file.type })
+    if (error) { showToast('⚠ Upload fehlgeschlagen: ' + error.message); return }
+
+    const { data } = db.storage.from('poker-photos').getPublicUrl(path)
+    setPhotos(prev => ({ ...prev, [date]: data.publicUrl + '?t=' + Date.now() }))
+    showToast('📷 Foto gespeichert!')
+  }
+
+  async function removePhoto(date) {
+    const exts = ['jpg','jpeg','png','webp','heic']
+    for (const ext of exts) {
+      await db.storage.from('poker-photos').remove([`nights/${date}.${ext}`]).catch(() => {})
+    }
+    setPhotos(prev => { const n = { ...prev }; delete n[date]; return n })
+    showToast('Foto entfernt')
+  }
 
   function toggleNight(date) {
     setOpenNights(prev => ({ ...prev, [date]: !prev[date] }))
@@ -88,8 +134,7 @@ export default function Sessions({ sessions, onRefresh }) {
       {/* Year filter */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
         {['all', ...years].map(y => (
-          <button key={y} onClick={() => setYearFilter(y)}
-            className="btn-ghost"
+          <button key={y} onClick={() => setYearFilter(y)} className="btn-ghost"
             style={{
               whiteSpace: 'nowrap',
               background: yearFilter === y ? 'rgba(201,168,76,0.2)' : undefined,
@@ -110,28 +155,25 @@ export default function Sessions({ sessions, onRefresh }) {
         const night = byDate[date]
         const isOpen = openNights[date]
         const potTotal = night.reduce((s, e) => s + e.buy_in, 0)
+        const photoUrl = photos[date]
 
         return (
           <div key={date} className="card" style={{ marginBottom: '12px', padding: '0' }}>
             {/* Night header */}
-            <div
-              onClick={() => toggleNight(date)}
-              style={{ padding: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-            >
+            <div onClick={() => toggleNight(date)}
+              style={{ padding: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div className="font-display" style={{ fontSize: '0.85rem', color: 'var(--gold)', letterSpacing: '0.1em' }}>
                   {formatDate(date)}
+                  {photoUrl && <span style={{ marginLeft: '8px', fontSize: '0.8rem' }}>📷</span>}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                   {night.length} Spieler · Pot {formatEuro(potTotal)}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  onClick={e => { e.stopPropagation(); setSettlementNight(date) }}
-                  className="btn-ghost"
-                  style={{ fontSize: '0.65rem', padding: '5px 10px' }}
-                >
+                <button onClick={e => { e.stopPropagation(); setSettlementNight(date) }}
+                  className="btn-ghost" style={{ fontSize: '0.65rem', padding: '5px 10px' }}>
                   💸 Ausgleich
                 </button>
                 <span style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>{isOpen ? '▲' : '▼'}</span>
@@ -141,38 +183,73 @@ export default function Sessions({ sessions, onRefresh }) {
             {/* Night entries */}
             {isOpen && (
               <div style={{ borderTop: '1px solid rgba(201,168,76,0.1)', padding: '8px 16px 16px' }}>
-                {night
-                  .slice()
-                  .sort((a, b) => (b.cash_out - b.buy_in) - (a.cash_out - a.buy_in))
-                  .map(s => {
-                    const profit = s.cash_out - s.buy_in
-                    return (
-                      <div key={s.id} style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
-                      }}>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{s.player_name}</div>
-                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                            Buy-In: {formatEuro(s.buy_in)}
-                            {s.rebuy_count > 0 && ` · ${s.rebuy_count}× Rebuy`}
-                            {' · '}Cash-Out: {formatEuro(s.cash_out)}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className={`font-display ${profitClass(profit)}`} style={{ fontSize: '0.9rem' }}>
-                            {formatEuroSign(profit)}
-                          </span>
-                          <button className="btn-danger" onClick={() => deleteSession(s.id)}>✕</button>
+
+                {/* Photo section */}
+                <div style={{ marginBottom: '16px' }}>
+                  {photoUrl ? (
+                    <div style={{ position: 'relative' }}>
+                      <img
+                        src={photoUrl} alt="Spielabend"
+                        onClick={() => setLightbox(photoUrl)}
+                        style={{ width: '100%', borderRadius: '8px', cursor: 'pointer', maxHeight: '200px', objectFit: 'cover' }}
+                      />
+                      <button
+                        onClick={() => setConfirm({
+                          title: '🗑️ Foto löschen?',
+                          text: 'Foto dieses Abends wirklich löschen?',
+                          onOk: () => { setConfirm(null); removePhoto(date) }
+                        })}
+                        style={{
+                          position: 'absolute', top: '8px', right: '8px',
+                          background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '50%',
+                          width: '28px', height: '28px', color: '#f87171', cursor: 'pointer', fontSize: '0.8rem',
+                        }}>✕</button>
+                    </div>
+                  ) : (
+                    <label style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      padding: '12px', borderRadius: '8px', cursor: 'pointer',
+                      border: '1px dashed rgba(201,168,76,0.25)',
+                      color: 'var(--text-muted)', fontSize: '0.85rem',
+                      background: 'rgba(201,168,76,0.04)',
+                    }}>
+                      📷 Foto hinzufügen
+                      <input
+                        type="file" accept="image/*" style={{ display: 'none' }}
+                        onChange={e => handlePhotoUpload(e, date)}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {/* Player entries */}
+                {night.slice().sort((a, b) => (b.cash_out - b.buy_in) - (a.cash_out - a.buy_in)).map(s => {
+                  const profit = s.cash_out - s.buy_in
+                  return (
+                    <div key={s.id} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{s.player_name}</div>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                          Buy-In: {formatEuro(s.buy_in)}
+                          {s.rebuy_count > 0 && ` · ${s.rebuy_count}× Rebuy`}
+                          {' · '}Cash-Out: {formatEuro(s.cash_out)}
                         </div>
                       </div>
-                    )
-                  })}
-                <button
-                  className="btn-danger"
-                  style={{ marginTop: '12px', width: '100%' }}
-                  onClick={() => deleteNight(date)}
-                >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span className={`font-display ${profitClass(profit)}`} style={{ fontSize: '0.9rem' }}>
+                          {formatEuroSign(profit)}
+                        </span>
+                        <button className="btn-danger" onClick={() => deleteSession(s.id)}>✕</button>
+                      </div>
+                    </div>
+                  )
+                })}
+
+                <button className="btn-danger" style={{ marginTop: '12px', width: '100%' }}
+                  onClick={() => deleteNight(date)}>
                   ✕ Ganzen Abend löschen
                 </button>
               </div>
@@ -180,6 +257,17 @@ export default function Sessions({ sessions, onRefresh }) {
           </div>
         )
       })}
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 600, padding: '20px', cursor: 'pointer',
+        }}>
+          <img src={lightbox} alt="Foto" style={{ maxWidth: '100%', maxHeight: '90vh', borderRadius: '10px', objectFit: 'contain' }} />
+        </div>
+      )}
 
       {/* Settlement modal */}
       {settlementNight && (
@@ -197,7 +285,6 @@ export default function Sessions({ sessions, onRefresh }) {
               {formatDate(settlementNight)} — minimale Überweisungen
             </div>
 
-            {/* Adjustment notice */}
             {settlementResult?.adjustmentNote && (
               <div style={{
                 background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.25)',
@@ -209,16 +296,13 @@ export default function Sessions({ sessions, onRefresh }) {
             )}
 
             {settlement.length === 0 ? (
-              <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px 0' }}>
-                Alles ausgeglichen ✓
-              </div>
+              <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px 0' }}>Alles ausgeglichen ✓</div>
             ) : (
               settlement.map((t, i) => (
                 <div key={i} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '12px 14px', background: 'rgba(0,0,0,0.2)',
-                  borderRadius: '8px', marginBottom: '8px',
-                  border: '1px solid rgba(201,168,76,0.1)',
+                  borderRadius: '8px', marginBottom: '8px', border: '1px solid rgba(201,168,76,0.1)',
                 }}>
                   <div style={{ fontSize: '0.9rem' }}>
                     <span style={{ color: '#f87171' }}>{t.from}</span>
@@ -241,13 +325,8 @@ export default function Sessions({ sessions, onRefresh }) {
       )}
 
       {confirm && (
-        <ConfirmDialog
-          title={confirm.title}
-          text={confirm.text}
-          okLabel="Löschen"
-          onOk={confirm.onOk}
-          onCancel={() => setConfirm(null)}
-        />
+        <ConfirmDialog title={confirm.title} text={confirm.text} okLabel="Löschen"
+          onOk={confirm.onOk} onCancel={() => setConfirm(null)} />
       )}
     </div>
   )
