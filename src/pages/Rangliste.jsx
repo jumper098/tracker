@@ -60,8 +60,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
     sessions.forEach(s => { if (!byDate[s.date]) byDate[s.date] = {}; byDate[s.date][s.player_name] = s })
     let winsA = 0, winsB = 0, draws = 0
 
-    // Shared sessions only
-    const sharedSessions = { A: [], B: [] }
+    // Head-to-head nights (both present)
     Object.values(byDate).forEach(night => {
       const a = night[nameA], b = night[nameB]
       if (!a || !b) return
@@ -69,15 +68,15 @@ export default function Rangliste({ sessions, avatars = {} }) {
       if (profA > profB) winsA++
       else if (profB > profA) winsB++
       else draws++
-      sharedSessions.A.push(a)
-      sharedSessions.B.push(b)
     })
 
-    // Build stats for each player from shared sessions only
-    function buildStats(sessions) {
+    // Build stats for each player from ALL their sessions
+    function buildStats(name) {
+      const playerSessions = sessions.filter(s => s.player_name === name)
       const s = { profit: 0, wins: 0, losses: 0, buyin: 0, rebuys: 0,
+        sessions: playerSessions.length,
         bestWin: -Infinity, bestWinDate: null, worstLoss: Infinity, worstLossDate: null }
-      sessions.forEach(sess => {
+      playerSessions.forEach(sess => {
         const profit = sess.cash_out - sess.buy_in
         s.profit += profit
         s.buyin += sess.buy_in
@@ -87,11 +86,9 @@ export default function Rangliste({ sessions, avatars = {} }) {
         if (profit > s.bestWin) { s.bestWin = profit; s.bestWinDate = sess.date }
         if (profit < s.worstLoss) { s.worstLoss = profit; s.worstLossDate = sess.date }
       })
-      const total = sessions.length
-      s.winRate = total > 0 ? (s.wins / total * 100) : 0
-      s.avgProfit = total > 0 ? s.profit / total : 0
-      // Streaks
-      const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date))
+      s.winRate = s.sessions > 0 ? (s.wins / s.sessions * 100) : 0
+      s.avgProfit = s.sessions > 0 ? s.profit / s.sessions : 0
+      const sorted = [...playerSessions].sort((a, b) => a.date.localeCompare(b.date))
       let curW = 0, maxW = 0, curL = 0, maxL = 0
       sorted.forEach(sess => {
         const profit = sess.cash_out - sess.buy_in
@@ -106,8 +103,8 @@ export default function Rangliste({ sessions, avatars = {} }) {
 
     return {
       winsA, winsB, draws, total: winsA + winsB + draws,
-      statsA: buildStats(sharedSessions.A),
-      statsB: buildStats(sharedSessions.B),
+      statsA: buildStats(nameA),
+      statsB: buildStats(nameB),
     }
   }
 
@@ -218,11 +215,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
                   </div>
                 )}
 
-                {/* H2H Button */}
-                <button className="btn-ghost" style={{ width: '100%', fontSize: '0.75rem' }}
-                  onClick={() => { setH2hA(p.name); setH2hB(''); setH2hOpen(true) }}>
-                  ⚔ HEAD-TO-HEAD VERGLEICH
-                </button>
+
               </div>
             )}
           </div>
@@ -289,7 +282,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
                   </div>
                 )}
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '16px' }}>
-                  {h2h.total} gemeinsame Spielabende
+                  {h2h.total} gemeinsame Spielabende · Gesamt: {statsMap[h2hA]?.sessions || 0} vs {statsMap[h2hB]?.sessions || 0} Sessions
                 </div>
 
                 {/* Stats comparison — only from shared sessions */}
