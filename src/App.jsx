@@ -10,7 +10,7 @@ import Grafik from './pages/Grafik'
 import Awards from './pages/Awards'
 import Turnier from './pages/Turnier'
 
-const DEFAULT_PLAYERS = ['Alex','Ben','Chris','Daniel','Eva','Felix','Gabi','Hans']
+const DEFAULT_PLAYERS = []
 
 export default function App() {
   const [tab, setTab] = useState('eintrag')
@@ -45,9 +45,14 @@ export default function App() {
     if (error) { setStatus('error'); return }
     setSessions(data || [])
     if (data) {
+      // Only add players from DB that have actual sessions
       const dbPlayers = [...new Set(data.map(s => s.player_name))]
       setPlayers(prev => {
-        const merged = [...new Set([...prev, ...dbPlayers])].sort()
+        // If localStorage was manually set (not default), only add DB players that are new
+        const stored = localStorage.getItem('poker_players')
+        const base = stored ? JSON.parse(stored) : []
+        // Merge: keep manually added + all from DB
+        const merged = [...new Set([...base, ...dbPlayers])].sort()
         localStorage.setItem('poker_players', JSON.stringify(merged))
         return merged
       })
@@ -271,7 +276,15 @@ function PlayerManager({ players, onAdd, onRemove, onRename, sessions, avatars, 
               ))}
             </div>
 
-            <button className="btn-ghost" style={{ width: '100%', marginTop: '16px' }}
+            <button
+              onClick={() => {
+                localStorage.removeItem('poker_players')
+                window.location.reload()
+              }}
+              style={{ width: '100%', marginTop: '10px', padding: '8px', background: 'none', border: '1px solid rgba(248,113,113,0.2)', borderRadius: '8px', color: 'rgba(248,113,113,0.6)', cursor: 'pointer', fontSize: '0.65rem', fontFamily: 'Cinzel, serif', letterSpacing: '0.06em' }}>
+              🔄 Spielerliste aktualisieren
+            </button>
+            <button className="btn-ghost" style={{ width: '100%', marginTop: '8px' }}
               onClick={() => { setOpen(false); setRenamingPlayer(null) }}>
               Schließen
             </button>
