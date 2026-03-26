@@ -16,7 +16,12 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background-color: var(--anthracite);
+  background-color: #0f1a13;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(13,43,26,0.9) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, rgba(201,168,76,0.05) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 60% at 0% 60%, rgba(10,35,20,0.6) 0%, transparent 60%);
+  background-attachment: fixed;
   color: var(--text-primary);
   font-family: 'Crimson Text', Georgia, serif;
   min-height: 100dvh;
