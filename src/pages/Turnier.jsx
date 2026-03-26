@@ -4,47 +4,57 @@ import { formatDate, formatEuro } from '../lib/helpers'
 import { showToast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 
-// Broadcast active tournament to all viewers via Supabase Realtime Presence
-function useTournamentBroadcast(activeTournament, setActiveTournament, setView, currentLevel, timeLeft, paused) {
-  const channelRef = useRef(null)
+// Sync live tournament to/from Supabase live_tournament table
+function useLiveTournamentSync(activeTournament, setActiveTournament, setView, currentLevel, timeLeft, paused) {
+  const isHostRef = useRef(false)
 
+  // On mount: check if there's a live tournament in DB
   useEffect(() => {
-    const channel = db.channel('live_tournament', { config: { presence: { key: 'host' } } })
+    async function checkLive() {
+      const { data } = await db.from('live_tournament').select('data').eq('id', 'current').single()
+      if (data?.data && !activeTournament) {
+        setActiveTournament({ ...data.data.tournament, readOnly: true })
+        setView('live')
+      }
+    }
+    checkLive()
 
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState()
-        const host = state['host']?.[0]
-        if (host?.tournament && !activeTournament) {
-          // Someone else is hosting — show their tournament as read-only
-          setActiveTournament({ ...host.tournament, readOnly: true })
-          setView('live')
-        }
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED' && activeTournament && !activeTournament.readOnly) {
-          await channel.track({
-            tournament: activeTournament,
-            level: currentLevel,
-            timeLeft,
-            paused,
+    // Subscribe to realtime changes on live_tournament
+    const channel = db.channel('live_tournament_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_tournament' }, (payload) => {
+        if (isHostRef.current) return // Host doesn't need to react to own updates
+        const d = payload.new?.data
+        if (d?.tournament) {
+          setActiveTournament(prev => {
+            if (!prev || prev.readOnly) return { ...d.tournament, readOnly: true }
+            return prev
           })
+          setView('live')
+        } else if (!d) {
+          // Tournament ended
+          setActiveTournament(prev => prev?.readOnly ? null : prev)
+          setView(prev => prev === 'live' ? 'create' : prev)
         }
       })
+      .subscribe()
 
-    channelRef.current = channel
     return () => { db.removeChannel(channel) }
   }, [])
 
-  // Update presence when tournament state changes
+  // When host updates tournament state, push to DB (throttled)
+  const lastSyncRef = useRef(0)
   useEffect(() => {
-    if (channelRef.current && activeTournament && !activeTournament.readOnly) {
-      channelRef.current.track({ tournament: activeTournament, level: currentLevel, timeLeft, paused })
-        .catch(() => {})
-    }
-  }, [activeTournament?.players, currentLevel, timeLeft, paused])
-
-  return channelRef
+    if (!activeTournament || activeTournament.readOnly) return
+    isHostRef.current = true
+    const now = Date.now()
+    if (now - lastSyncRef.current < 2000) return // max once per 2 seconds
+    lastSyncRef.current = now
+    db.from('live_tournament').upsert({
+      id: 'current',
+      data: { tournament: activeTournament, level: currentLevel, timeLeft, paused },
+      updated_at: new Date().toISOString(),
+    }).then(() => {})
+  }, [JSON.stringify(activeTournament?.players), currentLevel, Math.floor(timeLeft / 10)])
 }
 
 // ─── Blind Presets ────────────────────────────────────────────────────────────
@@ -103,6 +113,9 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   const [paused, setPaused] = useState(false)
   const timerRef = useRef(null)
   const pausedRef = useRef(false)
+
+  // Live sync
+  useLiveTournamentSync(activeTournament, setActiveTournament, setView, currentLevel, timeLeft, paused)
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
@@ -188,6 +201,10 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
 
   function addRebuy(name) {
     setActiveTournament(prev => {
+      if (prev?.readOnly) {
+        // Viewer is making a change — become co-editor
+        isHostRef.current = true
+      }
       const updated = {
         ...prev,
         players: prev.players.map(p => p.name === name ? {...p, rebuys: (p.rebuys||0)+1, eliminated: false, place: null} : p)
@@ -250,6 +267,8 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       payouts: activeTournament.payouts,
     }])
     if (error) { showToast('Fehler: ' + error.message); return }
+    // Clear live tournament from DB
+    await db.from('live_tournament').delete().eq('id', 'current')
     showToast('✓ Turnier gespeichert!')
     setActiveTournament(null)
     setView('create')
@@ -470,7 +489,9 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
           {/* Header bar */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <span className="font-display" style={{ fontSize: '0.7rem', color: 'var(--gold-light)' }}>{activeTournament.name}</span>
-            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{activeTournament.players.filter(p=>!p.eliminated).length} im Spiel</span>
+            <span style={{ fontSize: '0.7rem', color: activeTournament.readOnly ? '#f472b6' : 'var(--text-muted)' }}>
+              {activeTournament.readOnly ? '👁 Live' : `${activeTournament.players.filter(p=>!p.eliminated).length} im Spiel`}
+            </span>
           </div>
 
           {/* Timer card */}
