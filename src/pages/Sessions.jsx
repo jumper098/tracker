@@ -5,7 +5,7 @@ import { calcSettlement } from '../lib/settlement'
 import { showToast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 
-export default function Sessions({ sessions, onRefresh }) {
+export default function Sessions({ sessions, onRefresh, avatars = {} }) {
   const [openNights, setOpenNights] = useState({})
   const [settlementNight, setSettlementNight] = useState(null)
   const [confirm, setConfirm] = useState(null)
@@ -231,7 +231,14 @@ export default function Sessions({ sessions, onRefresh }) {
                       padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
                     }}>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{s.player_name}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "2px" }}>
+                            {avatars[s.player_name] ? (
+                              <img src={avatars[s.player_name]} alt={s.player_name} style={{ width: "28px", height: "28px", borderRadius: "50%", objectFit: "cover", border: "1px solid rgba(201,168,76,0.3)", flexShrink: 0 }} />
+                            ) : (
+                              <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "rgba(201,168,76,0.1)", border: "1px dashed rgba(201,168,76,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", flexShrink: 0 }}>👤</div>
+                            )}
+                            <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>{s.player_name}</div>
+                          </div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                           Buy-In: {formatEuro(s.buy_in)}
                           {s.rebuy_count > 0 && ` · ${s.rebuy_count}× Rebuy`}

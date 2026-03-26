@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db } from './lib/supabase'
+import { useAvatars } from './hooks/useAvatars'
 import { Toast, showToast } from './components/Toast'
 import PasswordGate from './components/PasswordGate'
 import TabBar from './components/TabBar'
@@ -22,6 +23,7 @@ export default function App() {
   })
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState('connecting')
+  const { avatars, uploadAvatar, deleteAvatar } = useAvatars()
 
   useEffect(() => {
     loadAll()
@@ -40,10 +42,7 @@ export default function App() {
   }
 
   async function loadSessions() {
-    const { data, error } = await db
-      .from('poker_sessions')
-      .select('*')
-      .order('date', { ascending: false })
+    const { data, error } = await db.from('poker_sessions').select('*').order('date', { ascending: false })
     if (error) { setStatus('error'); return }
     setSessions(data || [])
     if (data) {
@@ -57,10 +56,7 @@ export default function App() {
   }
 
   async function loadTournaments() {
-    const { data, error } = await db
-      .from('poker_tournaments')
-      .select('*')
-      .order('date', { ascending: false })
+    const { data, error } = await db.from('poker_tournaments').select('*').order('date', { ascending: false })
     if (!error) setTournaments(data || [])
   }
 
@@ -80,19 +76,11 @@ export default function App() {
   }
 
   async function renamePlayer(oldName, newName) {
-    // Update all sessions in Supabase
-    const { error } = await db
-      .from('poker_sessions')
-      .update({ player_name: newName })
-      .eq('player_name', oldName)
+    const { error } = await db.from('poker_sessions').update({ player_name: newName }).eq('player_name', oldName)
     if (error) { showToast('Fehler: ' + error.message); return }
-
-    // Update local player list
     const updated = players.map(p => p === oldName ? newName : p).sort()
     setPlayers(updated)
     localStorage.setItem('poker_players', JSON.stringify(updated))
-
-    // Reload sessions
     await loadSessions()
     showToast('✓ ' + oldName + ' → ' + newName)
   }
@@ -120,16 +108,17 @@ export default function App() {
         </span>
       </div>
 
-      {/* Player management button */}
       <PlayerManager
         players={players}
         onAdd={addPlayer}
         onRemove={removePlayer}
         onRename={renamePlayer}
         sessions={sessions}
+        avatars={avatars}
+        onUploadAvatar={uploadAvatar}
+        onDeleteAvatar={deleteAvatar}
       />
 
-      {/* Main content */}
       <div style={{ minHeight: '100vh' }}>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '16px' }}>
@@ -141,6 +130,7 @@ export default function App() {
             sessions={sessions}
             tournaments={tournaments}
             players={players}
+            avatars={avatars}
             onSessionAdded={loadSessions}
             onRefresh={loadAll}
           />
@@ -159,7 +149,7 @@ export default function App() {
 }
 
 // ─── Player Manager Modal ────────────────────────────────────────────────────
-function PlayerManager({ players, onAdd, onRemove, onRename, sessions }) {
+function PlayerManager({ players, onAdd, onRemove, onRename, sessions, avatars, onUploadAvatar, onDeleteAvatar }) {
   const [open, setOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [renamingPlayer, setRenamingPlayer] = useState(null)
@@ -168,15 +158,10 @@ function PlayerManager({ players, onAdd, onRemove, onRename, sessions }) {
 
   const usedPlayers = new Set(sessions.map(s => s.player_name))
 
-  function startRename(name) {
-    setRenamingPlayer(name)
-    setRenameValue(name)
-  }
+  function startRename(name) { setRenamingPlayer(name); setRenameValue(name) }
 
   async function confirmRename() {
-    if (!renameValue.trim() || renameValue.trim() === renamingPlayer) {
-      setRenamingPlayer(null); return
-    }
+    if (!renameValue.trim() || renameValue.trim() === renamingPlayer) { setRenamingPlayer(null); return }
     setRenameLoading(true)
     await onRename(renamingPlayer, renameValue.trim())
     setRenameLoading(false)
@@ -185,16 +170,13 @@ function PlayerManager({ players, onAdd, onRemove, onRename, sessions }) {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        style={{
-          position: 'fixed', top: '10px', left: '10px', zIndex: 200,
-          background: 'rgba(20,20,22,0.95)', border: '1px solid rgba(201,168,76,0.3)',
-          borderRadius: '20px', padding: '7px 14px',
-          fontFamily: 'Cinzel, serif', fontSize: '0.7rem',
-          color: 'var(--gold)', letterSpacing: '0.1em', cursor: 'pointer',
-        }}
-      >
+      <button onClick={() => setOpen(true)} style={{
+        position: 'fixed', top: '10px', left: '10px', zIndex: 200,
+        background: 'rgba(20,20,22,0.95)', border: '1px solid rgba(201,168,76,0.3)',
+        borderRadius: '20px', padding: '7px 14px',
+        fontFamily: 'Cinzel, serif', fontSize: '0.7rem',
+        color: 'var(--gold)', letterSpacing: '0.1em', cursor: 'pointer',
+      }}>
         👥 SPIELER
       </button>
 
@@ -221,19 +203,15 @@ function PlayerManager({ players, onAdd, onRemove, onRename, sessions }) {
             </div>
 
             {/* Spielerliste */}
-            <div style={{ maxHeight: '320px', overflowY: 'auto' }}>
+            <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
               {players.map(p => (
                 <div key={p} style={{ padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                   {renamingPlayer === p ? (
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <input
-                        className="input-field"
-                        value={renameValue}
+                      <input className="input-field" value={renameValue}
                         onChange={e => setRenameValue(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') confirmRename() }}
-                        autoFocus
-                        style={{ flex: 1 }}
-                      />
+                        autoFocus style={{ flex: 1 }} />
                       <button className="btn-gold" style={{ padding: '8px 12px', flexShrink: 0, fontSize: '0.75rem' }}
                         onClick={confirmRename} disabled={renameLoading}>
                         {renameLoading ? '…' : '✓'}
@@ -242,8 +220,33 @@ function PlayerManager({ players, onAdd, onRemove, onRename, sessions }) {
                         onClick={() => setRenamingPlayer(null)}>✕</button>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {/* Avatar */}
+                      <label style={{ cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
+                        {avatars[p] ? (
+                          <img src={avatars[p]} alt={p} style={{
+                            width: '40px', height: '40px', borderRadius: '50%',
+                            objectFit: 'cover', border: '2px solid rgba(201,168,76,0.4)',
+                          }} />
+                        ) : (
+                          <div style={{
+                            width: '40px', height: '40px', borderRadius: '50%',
+                            background: 'rgba(201,168,76,0.1)', border: '2px dashed rgba(201,168,76,0.3)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '1.1rem',
+                          }}>👤</div>
+                        )}
+                        <input type="file" accept="image/*" style={{ display: 'none' }}
+                          onChange={e => { if (e.target.files[0]) onUploadAvatar(p, e.target.files[0]) }} />
+                        <div style={{
+                          position: 'absolute', bottom: '-2px', right: '-2px',
+                          background: 'var(--gold)', borderRadius: '50%',
+                          width: '14px', height: '14px', fontSize: '0.55rem',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>📷</div>
+                      </label>
+
+                      <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '1rem' }}>{p}</div>
                         {usedPlayers.has(p) && (
                           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
@@ -251,7 +254,12 @@ function PlayerManager({ players, onAdd, onRemove, onRename, sessions }) {
                           </div>
                         )}
                       </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {avatars[p] && (
+                          <button className="btn-danger" style={{ fontSize: '0.65rem', padding: '4px 8px' }}
+                            onClick={() => onDeleteAvatar(p)}>🗑</button>
+                        )}
                         <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }}
                           onClick={() => startRename(p)}>✏️</button>
                         {!usedPlayers.has(p) && (
