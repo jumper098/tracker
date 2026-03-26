@@ -245,46 +245,15 @@ export default function Grafik({ sessions }) {
         ))}
       </div>
 
-      {/* Player selector */}
-      <div className="card" style={{ padding: '14px', marginBottom: '16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-          <div className="section-label" style={{ marginBottom: 0 }}>
-            SPIELER ({selectedPlayers.length}/5)
-          </div>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button className="btn-ghost" style={{ fontSize: '0.6rem', padding: '3px 8px' }}
-              onClick={() => setSelectedPlayers(playersByProfit.slice(0, 5))}>
-              Top 5
-            </button>
-            <button className="btn-ghost" style={{ fontSize: '0.6rem', padding: '3px 8px' }}
-              onClick={() => setSelectedPlayers([])}>
-              Keine
-            </button>
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
-          {playersByProfit.map((name, i) => {
-            const colorIdx = selectedPlayers.indexOf(name)
-            const isSelected = colorIdx !== -1
-            const color = isSelected ? COLORS[colorIdx % COLORS.length] : null
-            const disabled = !isSelected && selectedPlayers.length >= 5
-            return (
-              <button key={name} onClick={() => !disabled && togglePlayer(name)}
-                style={{
-                  padding: '5px 14px', borderRadius: '20px', cursor: disabled ? 'not-allowed' : 'pointer',
-                  border: `1.5px solid ${isSelected ? color : 'rgba(255,255,255,0.1)'}`,
-                  background: isSelected ? color + '22' : 'transparent',
-                  color: isSelected ? color : disabled ? 'rgba(255,255,255,0.2)' : 'var(--text-muted)',
-                  fontSize: '0.85rem', transition: 'all 0.15s',
-                  fontWeight: isSelected ? 600 : 400,
-                }}>
-                {isSelected && <span style={{ marginRight: '4px', fontSize: '0.7rem' }}>●</span>}
-                {name}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      {/* Player selector dropdown */}
+      <PlayerDropdown
+        players={playersByProfit}
+        selected={selectedPlayers}
+        onToggle={togglePlayer}
+        onSelectTop5={() => setSelectedPlayers(playersByProfit.slice(0, 5))}
+        onClear={() => setSelectedPlayers([])}
+        colors={COLORS}
+      />
 
       {/* Chart */}
       <div className="card" style={{ padding: '16px' }}>
@@ -308,6 +277,121 @@ export default function Grafik({ sessions }) {
         <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
           Maximum 5 Spieler gleichzeitig
         </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Player Dropdown ─────────────────────────────────────────────────────────
+function PlayerDropdown({ players, selected, onToggle, onSelectTop5, onClear, colors }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div style={{ marginBottom: '16px', position: 'relative' }}>
+      {/* Trigger button */}
+      <div
+        onClick={() => setOpen(p => !p)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '10px 14px', borderRadius: '10px', cursor: 'pointer',
+          background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(201,168,76,0.2)',
+          transition: 'border-color 0.2s',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em', flexShrink: 0 }}>
+            SPIELER
+          </span>
+          {selected.length === 0 ? (
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>— Auswählen —</span>
+          ) : (
+            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+              {selected.map((name, i) => (
+                <span key={name} style={{
+                  padding: '2px 10px', borderRadius: '12px', fontSize: '0.8rem',
+                  background: colors[i % colors.length] + '22',
+                  border: `1px solid ${colors[i % colors.length]}`,
+                  color: colors[i % colors.length], fontWeight: 600,
+                }}>
+                  {name}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '8px', flexShrink: 0 }}>
+          {open ? '▲' : '▼'}
+        </span>
+      </div>
+
+      {/* Dropdown list */}
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
+          background: '#1E1E22', border: '1px solid rgba(201,168,76,0.25)',
+          borderRadius: '10px', zIndex: 100,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+          overflow: 'hidden',
+        }}>
+          {/* Top actions */}
+          <div style={{ display: 'flex', gap: '0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <button onClick={() => { onSelectTop5(); setOpen(false) }}
+              style={{ flex: 1, padding: '9px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gold)', fontFamily: 'Cinzel, serif', fontSize: '0.65rem', letterSpacing: '0.08em' }}>
+              TOP 5
+            </button>
+            <div style={{ width: '1px', background: 'rgba(255,255,255,0.06)' }} />
+            <button onClick={() => { onClear(); setOpen(false) }}
+              style={{ flex: 1, padding: '9px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', fontSize: '0.65rem', letterSpacing: '0.08em' }}>
+              ALLE LÖSCHEN
+            </button>
+          </div>
+
+          {/* Player list */}
+          {players.map((name, i) => {
+            const colorIdx = selected.indexOf(name)
+            const isSelected = colorIdx !== -1
+            const color = isSelected ? colors[colorIdx % colors.length] : null
+            const disabled = !isSelected && selected.length >= 5
+            return (
+              <div key={name}
+                onClick={() => !disabled && onToggle(name)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  padding: '11px 14px', cursor: disabled ? 'not-allowed' : 'pointer',
+                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  background: isSelected ? color + '11' : 'transparent',
+                  transition: 'background 0.15s',
+                  opacity: disabled ? 0.35 : 1,
+                }}
+              >
+                {/* Checkbox */}
+                <div style={{
+                  width: '18px', height: '18px', borderRadius: '5px', flexShrink: 0,
+                  border: `2px solid ${isSelected ? color : 'rgba(255,255,255,0.2)'}`,
+                  background: isSelected ? color : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {isSelected && <span style={{ color: '#000', fontSize: '0.65rem', fontWeight: 900 }}>✓</span>}
+                </div>
+                {/* Color dot */}
+                {isSelected && (
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: color, flexShrink: 0 }} />
+                )}
+                <span style={{ fontSize: '0.95rem', color: isSelected ? color : 'var(--text-primary)', fontWeight: isSelected ? 600 : 400 }}>
+                  {name}
+                </span>
+                {disabled && (
+                  <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: 'var(--text-muted)' }}>Max 5</span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Click outside to close */}
+      {open && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setOpen(false)} />
       )}
     </div>
   )
