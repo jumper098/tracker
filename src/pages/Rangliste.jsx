@@ -89,7 +89,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
 
       {/* Year filter */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '4px' }}>
-        {['all', ...years].map(y => (
+        {[...years, 'all'].map(y => (
           <button key={y} onClick={() => setYearFilter(y)} className="btn-ghost"
             style={{
               whiteSpace: 'nowrap',

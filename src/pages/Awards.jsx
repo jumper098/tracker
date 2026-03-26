@@ -83,7 +83,7 @@ export default function Awards({ sessions, tournaments }) {
 
       {/* Year filter */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
-        {['all', ...years].map(y => (
+        {[...years, 'all'].map(y => (
           <button key={y} onClick={() => setYearFilter(y)} className="btn-ghost"
             style={{
               whiteSpace: 'nowrap',
