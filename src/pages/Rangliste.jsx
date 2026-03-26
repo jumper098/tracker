@@ -167,6 +167,12 @@ export default function Rangliste({ sessions, avatars = {} }) {
               <div style={{ borderTop: '1px solid rgba(201,168,76,0.1)', padding: '14px 16px' }}
                 onClick={e => e.stopPropagation()}>
 
+                {/* H2H Button — top */}
+                <button className="btn-gold" style={{ width: '100%', fontSize: '0.75rem', marginBottom: '14px' }}
+                  onClick={() => { setH2hA(p.name); setH2hB(''); setH2hOpen(true) }}>
+                  ⚔ HEAD-TO-HEAD VERGLEICH
+                </button>
+
                 {/* Stats grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '10px' }}>
                   {[
