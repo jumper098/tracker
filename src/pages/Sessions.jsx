@@ -9,7 +9,10 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
   const [openNights, setOpenNights] = useState({})
   const [settlementNight, setSettlementNight] = useState(null)
   const [confirm, setConfirm] = useState(null)
-  const [yearFilter, setYearFilter] = useState('all')
+  const [yearFilter, setYearFilter] = useState(() => {
+    const yrs = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
+    return yrs.length > 0 ? yrs[0] : 'all'
+  })
   const [photos, setPhotos] = useState({})
   const [lightbox, setLightbox] = useState(null)
   const [editSession, setEditSession] = useState(null)
@@ -162,11 +165,12 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
       </div>
 
       {/* Year filter */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
-        {['all', ...years].map(y => (
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+        {[...years, 'all'].map(y => (
           <button key={y} onClick={() => setYearFilter(y)} className="btn-ghost"
             style={{
-              whiteSpace: 'nowrap',
+              flex: 1,
+              textAlign: 'center',
               background: yearFilter === y ? 'rgba(201,168,76,0.2)' : undefined,
               borderColor: yearFilter === y ? 'rgba(201,168,76,0.5)' : undefined,
               color: yearFilter === y ? 'var(--gold-light)' : undefined,

@@ -7,7 +7,10 @@ export default function Grafik({ sessions }) {
   const canvasRef = useRef(null)
   const chartRef = useRef(null)
   const [chartType, setChartType] = useState('cumulative')
-  const [yearFilter, setYearFilter] = useState('all')
+  const [yearFilter, setYearFilter] = useState(() => {
+    const yrs = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
+    return yrs.length > 0 ? yrs[0] : 'all'
+  })
   const [selectedPlayers, setSelectedPlayers] = useState([])
 
   const years = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
@@ -154,11 +157,12 @@ export default function Grafik({ sessions }) {
       </div>
 
       {/* Year filter */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
-        {['all', ...years].map(y => (
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+        {[...years, 'all'].map(y => (
           <button key={y} onClick={() => setYearFilter(y)} className="btn-ghost"
             style={{
-              whiteSpace: 'nowrap',
+              flex: 1,
+              textAlign: 'center',
               background: yearFilter === y ? 'rgba(201,168,76,0.2)' : undefined,
               borderColor: yearFilter === y ? 'rgba(201,168,76,0.5)' : undefined,
               color: yearFilter === y ? 'var(--gold-light)' : undefined,

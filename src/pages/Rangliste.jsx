@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { formatEuro, formatEuroSign, formatDate, profitClass } from '../lib/helpers'
 
 export default function Rangliste({ sessions, avatars = {} }) {
-  const [yearFilter, setYearFilter] = useState('all')
+  const [yearFilter, setYearFilter] = useState(() => {
+    const yrs = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
+    return yrs.length > 0 ? yrs[0] : 'all'
+  })
   const [expanded, setExpanded] = useState({})
   const [h2hA, setH2hA] = useState('')
   const [h2hB, setH2hB] = useState('')
@@ -90,6 +93,8 @@ export default function Rangliste({ sessions, avatars = {} }) {
           <button key={y} onClick={() => setYearFilter(y)} className="btn-ghost"
             style={{
               whiteSpace: 'nowrap',
+              flex: 1,
+              textAlign: 'center',
               background: yearFilter === y ? 'rgba(201,168,76,0.2)' : undefined,
               borderColor: yearFilter === y ? 'rgba(201,168,76,0.5)' : undefined,
               color: yearFilter === y ? 'var(--gold-light)' : undefined,
