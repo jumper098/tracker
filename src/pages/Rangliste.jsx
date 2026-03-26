@@ -1,22 +1,22 @@
 import { useState } from 'react'
 import { formatEuro, formatEuroSign, profitClass } from '../lib/helpers'
 
+const MEDALS = ['🥇', '🥈', '🥉']
+
 export default function Rangliste({ sessions, avatars = {} }) {
   const [yearFilter, setYearFilter] = useState('all')
+  const [sortMode, setSortMode] = useState('profit')
   const [expanded, setExpanded] = useState({})
+  const [h2hA, setH2hA] = useState('')
+  const [h2hB, setH2hB] = useState('')
 
   function toggleExpand(name) {
     setExpanded(prev => ({ ...prev, [name]: !prev[name] }))
   }
-  const [sortMode, setSortMode] = useState('profit')
-  const [h2hA, setH2hA] = useState('')
-  const [h2hB, setH2hB] = useState('')
-  const [showH2H, setShowH2H] = useState(false)
 
   const years = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
   const filtered = yearFilter === 'all' ? sessions : sessions.filter(s => s.date.startsWith(yearFilter))
 
-  // Build player stats
   const statsMap = {}
   filtered.forEach(s => {
     if (!statsMap[s.player_name]) statsMap[s.player_name] = {
@@ -50,7 +50,6 @@ export default function Rangliste({ sessions, avatars = {} }) {
 
   const allPlayerNames = [...new Set(sessions.map(s => s.player_name))].sort()
 
-  // H2H calculation
   function calcH2H(nameA, nameB) {
     const byDate = {}
     sessions.forEach(s => { if (!byDate[s.date]) byDate[s.date] = {}; byDate[s.date][s.player_name] = s })
@@ -68,8 +67,6 @@ export default function Rangliste({ sessions, avatars = {} }) {
   }
 
   const h2h = (h2hA && h2hB && h2hA !== h2hB) ? calcH2H(h2hA, h2hB) : null
-
-  const MEDALS = ['🥇', '🥈', '🥉']
 
   return (
     <div style={{ padding: '20px 16px 100px' }}>
@@ -119,99 +116,91 @@ export default function Rangliste({ sessions, avatars = {} }) {
       {sorted.map((p, i) => {
         const isOpen = expanded[p.name]
         return (
-        <div key={p.name} className="card" style={{ marginBottom: '10px', padding: '0', cursor: 'pointer' }}
-          onClick={() => toggleExpand(p.name)}>
+          <div key={p.name} className="card"
+            style={{ marginBottom: '10px', padding: '0', cursor: 'pointer' }}
+            onClick={() => toggleExpand(p.name)}>
 
-          {/* Always visible row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px' }}>
-            <div style={{ fontSize: i < 3 ? '1.4rem' : '0.9rem', minWidth: '28px', textAlign: 'center', flexShrink: 0 }}>
-              {i < 3 ? MEDALS[i] : `#${i + 1}`}
-            </div>
-            {avatars[p.name] ? (
-              <img src={avatars[p.name]} alt={p.name} style={{
-                width: '42px', height: '42px', borderRadius: '50%',
-                objectFit: 'cover', border: '2px solid rgba(201,168,76,0.35)', flexShrink: 0,
-              }} />
-            ) : (
-              <div style={{
-                width: '42px', height: '42px', borderRadius: '50%',
-                background: 'rgba(201,168,76,0.08)', border: '1px dashed rgba(201,168,76,0.25)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.2rem', flexShrink: 0,
-              }}>👤</div>
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: '1rem' }}>{p.name}</div>
-            </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div className={`font-display ${profitClass(p.profit)}`} style={{ fontSize: '1rem' }}>
-                {formatEuroSign(p.profit)}
+            {/* Always visible */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px' }}>
+              <div style={{ fontSize: i < 3 ? '1.4rem' : '0.9rem', minWidth: '28px', textAlign: 'center', flexShrink: 0 }}>
+                {i < 3 ? MEDALS[i] : `#${i + 1}`}
               </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                Ø {formatEuroSign(p.avgProfit)}
-              </div>
-            </div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '4px' }}>
-              {isOpen ? '▲' : '▼'}
-            </div>
-          </div>
-
-          {/* Expanded stats */}
-          {isOpen && (
-            <div style={{ borderTop: '1px solid rgba(201,168,76,0.1)', padding: '14px 16px' }}
-              onClick={e => e.stopPropagation()}>
-
-              {/* Stats grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '14px' }}>
-                {[
-                  { label: 'Sessions', value: p.sessions },
-                  { label: 'Siege', value: p.wins },
-                  { label: 'Niederlagen', value: p.losses },
-                  { label: 'Winrate', value: p.winRate.toFixed(0) + '%' },
-                  { label: 'Rebuys', value: p.rebuys },
-                  { label: 'Best Win', value: p.bestWin !== -Infinity ? formatEuroSign(p.bestWin) : '—' },
-                ].map(s => (
-                  <div key={s.label} style={{
-                    background: 'rgba(0,0,0,0.2)', borderRadius: '8px',
-                    padding: '10px 8px', textAlign: 'center',
-                    border: '1px solid rgba(255,255,255,0.04)',
-                  }}>
-                    <div className="font-display" style={{ fontSize: '0.9rem', color: 'var(--gold)' }}>{s.value}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em' }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Win/Loss bar */}
-              {p.sessions > 0 && (
-                <div>
-                  <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', height: '8px', marginBottom: '4px' }}>
-                    <div style={{ flex: p.wins, background: '#4ade80', opacity: 0.8 }} />
-                    <div style={{ flex: p.losses, background: '#f87171', opacity: 0.8 }} />
-                    <div style={{ flex: p.sessions - p.wins - p.losses, background: 'var(--text-muted)', opacity: 0.3 }} />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                    <span style={{ color: '#4ade80' }}>✓ {p.wins} Siege</span>
-                    <span style={{ color: '#f87171' }}>✗ {p.losses} Niederl.</span>
-                  </div>
-                </div>
+              {avatars[p.name] ? (
+                <img src={avatars[p.name]} alt={p.name} style={{
+                  width: '42px', height: '42px', borderRadius: '50%',
+                  objectFit: 'cover', border: '2px solid rgba(201,168,76,0.35)', flexShrink: 0,
+                }} />
+              ) : (
+                <div style={{
+                  width: '42px', height: '42px', borderRadius: '50%',
+                  background: 'rgba(201,168,76,0.08)', border: '1px dashed rgba(201,168,76,0.25)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '1.2rem', flexShrink: 0,
+                }}>👤</div>
               )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: '1rem' }}>{p.name}</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div className={`font-display ${profitClass(p.profit)}`} style={{ fontSize: '1rem' }}>
+                  {formatEuroSign(p.profit)}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  Ø {formatEuroSign(p.avgProfit)}
+                </div>
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '4px' }}>
+                {isOpen ? '▲' : '▼'}
+              </div>
             </div>
-          )}
-        </div>
+
+            {/* Expanded stats */}
+            {isOpen && (
+              <div style={{ borderTop: '1px solid rgba(201,168,76,0.1)', padding: '14px 16px' }}
+                onClick={e => e.stopPropagation()}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '14px' }}>
+                  {[
+                    { label: 'Sessions', value: p.sessions },
+                    { label: 'Siege', value: p.wins },
+                    { label: 'Niederlagen', value: p.losses },
+                    { label: 'Winrate', value: p.winRate.toFixed(0) + '%' },
+                    { label: 'Rebuys', value: p.rebuys },
+                    { label: 'Best Win', value: p.bestWin !== -Infinity ? formatEuroSign(p.bestWin) : '—' },
+                  ].map(s => (
+                    <div key={s.label} style={{
+                      background: 'rgba(0,0,0,0.2)', borderRadius: '8px',
+                      padding: '10px 8px', textAlign: 'center',
+                      border: '1px solid rgba(255,255,255,0.04)',
+                    }}>
+                      <div className="font-display" style={{ fontSize: '0.9rem', color: 'var(--gold)' }}>{s.value}</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em' }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+                {p.sessions > 0 && (
+                  <div>
+                    <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', height: '8px', marginBottom: '4px' }}>
+                      <div style={{ flex: p.wins, background: '#4ade80', opacity: 0.8 }} />
+                      <div style={{ flex: p.losses, background: '#f87171', opacity: 0.8 }} />
+                      <div style={{ flex: p.sessions - p.wins - p.losses, background: 'var(--text-muted)', opacity: 0.3 }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                      <span style={{ color: '#4ade80' }}>✓ {p.wins} Siege</span>
+                      <span style={{ color: '#f87171' }}>✗ {p.losses} Niederlagen</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )
-      }
-      ))}
+      })}
 
       {/* Head-to-Head */}
       <div className="card" style={{ marginTop: '24px' }}>
-        <div className="font-display" style={{
-          fontSize: '0.8rem', color: 'var(--gold)',
-          letterSpacing: '0.12em', marginBottom: '16px',
-        }}>
+        <div className="font-display" style={{ fontSize: '0.8rem', color: 'var(--gold)', letterSpacing: '0.12em', marginBottom: '16px' }}>
           ⚔ HEAD-TO-HEAD
         </div>
-
         <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
           <select className="input-field" value={h2hA} onChange={e => setH2hA(e.target.value)}>
             <option value="">Spieler 1</option>
@@ -222,7 +211,6 @@ export default function Rangliste({ sessions, avatars = {} }) {
             {allPlayerNames.map(n => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
-
         {h2h && (
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '12px', alignItems: 'center', textAlign: 'center', marginBottom: '12px' }}>
@@ -239,7 +227,6 @@ export default function Rangliste({ sessions, avatars = {} }) {
                 <div className="font-display profit-pos" style={{ fontSize: '1.5rem' }}>{h2h.winsB}</div>
               </div>
             </div>
-            {/* H2H bar */}
             {h2h.total > 0 && (
               <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', height: '8px' }}>
                 <div style={{ flex: h2h.winsA, background: '#4ade80' }} />
@@ -252,7 +239,6 @@ export default function Rangliste({ sessions, avatars = {} }) {
             </div>
           </div>
         )}
-
         {h2hA && h2hB && h2hA === h2hB && (
           <div style={{ color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.85rem' }}>
             Bitte zwei verschiedene Spieler auswählen
