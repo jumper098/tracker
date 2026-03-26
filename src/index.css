@@ -248,3 +248,12 @@ input[type="date"].input-field {
   margin-bottom: 8px;
   display: block;
 }
+
+/* Safe Area für iPhone PWA (Home Indicator) */
+.tab-bar {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+}
