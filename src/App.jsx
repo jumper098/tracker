@@ -88,6 +88,7 @@ export default function App() {
   const PageComponent = pages[tab]
 
   return (
+    <div>
       {/* Status indicator */}
       <div style={{
         position: 'fixed', top: '10px', right: '10px', zIndex: 200,
@@ -142,6 +143,7 @@ export default function App() {
         @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.4 } }
         @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
       `}</style>
+    </div>
   )
 }
 
