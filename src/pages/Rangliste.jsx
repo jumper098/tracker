@@ -8,6 +8,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
   const [h2hOpen, setH2hOpen] = useState(false)
   const [h2hA, setH2hA] = useState('')
   const [h2hB, setH2hB] = useState('')
+  const [h2hYear, setH2hYear] = useState('all')
 
   const filtered = yearFilter === 'all' ? sessions : sessions.filter(s => s.date.startsWith(yearFilter))
 
@@ -55,9 +56,10 @@ export default function Rangliste({ sessions, avatars = {} }) {
     setExpanded(prev => ({ ...prev, [name]: !prev[name] }))
   }
 
-  function calcH2H(nameA, nameB) {
+  function calcH2H(nameA, nameB, yearF = 'all') {
+    const filteredH2H = yearF === 'all' ? sessions : sessions.filter(s => s.date.startsWith(yearF))
     const byDate = {}
-    sessions.forEach(s => { if (!byDate[s.date]) byDate[s.date] = {}; byDate[s.date][s.player_name] = s })
+    filteredH2H.forEach(s => { if (!byDate[s.date]) byDate[s.date] = {}; byDate[s.date][s.player_name] = s })
     let winsA = 0, winsB = 0, draws = 0
 
     // Head-to-head nights (both present)
@@ -70,9 +72,9 @@ export default function Rangliste({ sessions, avatars = {} }) {
       else draws++
     })
 
-    // Build stats for each player from ALL their sessions
+    // Build stats for each player filtered by year
     function buildStats(name) {
-      const playerSessions = sessions.filter(s => s.player_name === name)
+      const playerSessions = filteredH2H.filter(s => s.player_name === name)
       const s = { profit: 0, wins: 0, losses: 0, buyin: 0, rebuys: 0,
         sessions: playerSessions.length,
         bestWin: -Infinity, bestWinDate: null, worstLoss: Infinity, worstLossDate: null }
@@ -108,7 +110,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
     }
   }
 
-  const h2h = (h2hA && h2hB && h2hA !== h2hB) ? calcH2H(h2hA, h2hB) : null
+  const h2h = (h2hA && h2hB && h2hA !== h2hB) ? calcH2H(h2hA, h2hB, h2hYear) : null
   const MEDALS = ['🥇', '🥈', '🥉']
 
   return (
@@ -234,11 +236,27 @@ export default function Rangliste({ sessions, avatars = {} }) {
           onClick={() => setH2hOpen(false)}>
           <div className="card" style={{ maxWidth: '380px', width: '100%', padding: '24px' }}
             onClick={e => e.stopPropagation()}>
-            <div className="font-display" style={{ fontSize: '0.9rem', color: 'var(--gold)', letterSpacing: '0.12em', marginBottom: '20px' }}>
+            <div className="font-display" style={{ fontSize: '0.9rem', color: 'var(--gold)', letterSpacing: '0.12em', marginBottom: '14px' }}>
               ⚔ HEAD-TO-HEAD
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+            {/* Year filter */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+              {[...years, 'all'].map(y => (
+                <button key={y} onClick={() => setH2hYear(y)} className="btn-ghost"
+                  style={{
+                    flex: 1, textAlign: 'center',
+                    background: h2hYear === y ? 'rgba(201,168,76,0.2)' : undefined,
+                    borderColor: h2hYear === y ? 'rgba(201,168,76,0.5)' : undefined,
+                    color: h2hYear === y ? 'var(--gold-light)' : undefined,
+                    fontSize: '0.7rem', padding: '6px 4px',
+                  }}>
+                  {y === 'all' ? 'Alle' : y}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
               <select className="input-field" value={h2hA} onChange={e => setH2hA(e.target.value)}>
                 <option value="">Spieler 1</option>
                 {allPlayerNames.map(n => <option key={n} value={n}>{n}</option>)}
