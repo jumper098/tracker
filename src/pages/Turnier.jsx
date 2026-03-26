@@ -455,9 +455,14 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                     style={{ flex: 1, textAlign: 'center' }}
                   />
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>%</span>
-                  <span style={{ fontFamily: 'Cinzel, serif', fontSize: '0.8rem', color: 'var(--gold)', minWidth: '48px', textAlign: 'right' }}>
-                    {tPlayers.length > 0 ? euroVal + '€' : '—'}
-                  </span>
+                  <div style={{ textAlign: 'right', minWidth: '60px' }}>
+                    <div style={{ fontFamily: 'Cinzel, serif', fontSize: '0.8rem', color: 'var(--gold)' }}>
+                      {tPlayers.length > 0 ? euroVal + '€' : '—'}
+                    </div>
+                    <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>
+                      {p.pct > 0 ? p.pct + '%' : ''}
+                    </div>
+                  </div>
                   <button className="btn-danger" onClick={() => setPayouts(prev => prev.filter((_,idx) => idx!==i).map((po,idx)=>({...po,place:idx+1})))}>✕</button>
                 </div>
               )
@@ -717,7 +722,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                 </div>
                 <button className="btn-danger" onClick={e => { e.stopPropagation(); deleteTournament(t.id) }}>✕</button>
               </div>
-              {(t.results||[]).slice(0,3).map(r => (
+              {[...(t.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).slice(0,3).map(r => (
                 <div key={r.name} style={{ display:'flex',justifyContent:'space-between',fontSize:'0.85rem',padding:'4px 0' }}>
                   <span>{r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':`#${r.place}`} {r.name}</span>
                   {r.payout > 0 && <span style={{ color:'#4ade80' }}>+{formatEuro(r.payout)}</span>}
