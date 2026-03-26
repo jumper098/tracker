@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { formatEuroSign } from '../lib/helpers'
 
-const COLORS = ['#C9A84C','#4ade80','#60a5fa','#f472b6','#a78bfa','#fb923c','#34d399','#e879f9','#f87171','#38bdf8']
+// 10 visually distinct colors
+const COLORS = [
+  '#C9A84C', '#4ade80', '#60a5fa', '#f472b6',
+  '#a78bfa', '#fb923c', '#34d399', '#f87171',
+  '#38bdf8', '#e879f9',
+]
 
 export default function Grafik({ sessions }) {
   const canvasRef = useRef(null)
@@ -12,38 +16,95 @@ export default function Grafik({ sessions }) {
     return yrs.length > 0 ? yrs[0] : 'all'
   })
   const [selectedPlayers, setSelectedPlayers] = useState([])
+  const [chartReady, setChartReady] = useState(false)
 
   const years = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
   const filtered = yearFilter === 'all' ? sessions : sessions.filter(s => s.date.startsWith(yearFilter))
   const allPlayers = [...new Set(filtered.map(s => s.player_name))].sort()
 
+  // Sort players by profit descending, auto-select top 3
+  const playersByProfit = [...allPlayers].sort((a, b) => {
+    const profA = filtered.filter(s => s.player_name === a).reduce((sum, s) => sum + (s.cash_out - s.buy_in), 0)
+    const profB = filtered.filter(s => s.player_name === b).reduce((sum, s) => sum + (s.cash_out - s.buy_in), 0)
+    return profB - profA
+  })
+
+  // Auto-select top 3 when year or players change
   useEffect(() => {
-    if (selectedPlayers.length === 0 && allPlayers.length > 0) {
-      setSelectedPlayers(allPlayers.slice(0, 5))
-    }
-  }, [allPlayers.join(',')])
+    setSelectedPlayers(playersByProfit.slice(0, 3))
+  }, [yearFilter, allPlayers.join(',')])
 
   function togglePlayer(name) {
-    setSelectedPlayers(prev =>
-      prev.includes(name) ? prev.filter(p => p !== name) : [...prev, name]
-    )
+    setSelectedPlayers(prev => {
+      if (prev.includes(name)) return prev.filter(p => p !== name)
+      if (prev.length >= 5) return prev // max 5
+      return [...prev, name]
+    })
   }
 
+  // Load Chart.js
   useEffect(() => {
-    if (!canvasRef.current) return
-    const Chart = window.Chart
-    if (!Chart) return
+    if (window.Chart) { setChartReady(true); return }
+    const script = document.createElement('script')
+    script.src = 'https://cdn.jsdelivr.net/npm/chart.js'
+    script.onload = () => setChartReady(true)
+    document.head.appendChild(script)
+  }, [])
 
+  // Draw chart
+  useEffect(() => {
+    if (!chartReady || !canvasRef.current) return
+    const Chart = window.Chart
     if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null }
 
     const ctx = canvasRef.current.getContext('2d')
-    const activePlayers = selectedPlayers.filter(p => allPlayers.includes(p))
-    if (activePlayers.length === 0 || filtered.length === 0) return
+    const active = selectedPlayers.filter(p => allPlayers.includes(p))
+    if (active.length === 0 || filtered.length === 0) return
 
     const sortedDates = [...new Set(filtered.map(s => s.date))].sort()
 
+    const gridColor = 'rgba(255,255,255,0.06)'
+    const tickColor = '#7A7060'
+    const baseOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: '#F0E6CC',
+            font: { family: 'Cinzel', size: 11 },
+            padding: 16,
+            usePointStyle: true,
+            pointStyleWidth: 10,
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(20,20,22,0.95)',
+          borderColor: 'rgba(201,168,76,0.3)',
+          borderWidth: 1,
+          titleColor: '#C9A84C',
+          bodyColor: '#F0E6CC',
+          titleFont: { family: 'Cinzel', size: 11 },
+          bodyFont: { family: 'Crimson Text', size: 13 },
+          padding: 10,
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: tickColor, maxTicksLimit: 8, font: { size: 10 } },
+          grid: { color: gridColor },
+        },
+        y: {
+          ticks: { color: tickColor, font: { size: 10 } },
+          grid: { color: gridColor },
+        }
+      }
+    }
+
     if (chartType === 'cumulative') {
-      const datasets = activePlayers.map((name, i) => {
+      const datasets = active.map((name, i) => {
+        const color = COLORS[i % COLORS.length]
         const playerSessions = filtered.filter(s => s.player_name === name)
           .sort((a, b) => a.date.localeCompare(b.date))
         let cumulative = 0
@@ -54,26 +115,32 @@ export default function Grafik({ sessions }) {
         })
         return {
           label: name, data,
-          borderColor: COLORS[i % COLORS.length],
-          backgroundColor: COLORS[i % COLORS.length] + '20',
-          tension: 0.3, pointRadius: 4, fill: false,
+          borderColor: color,
+          backgroundColor: color + '18',
+          tension: 0.35,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: color,
+          borderWidth: 2.5,
+          fill: false,
         }
       })
       chartRef.current = new Chart(ctx, {
         type: 'line',
         data: { datasets },
         options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { labels: { color: '#F0E6CC', font: { family: 'Cinzel', size: 11 } } } },
+          ...baseOptions,
           scales: {
-            x: { type: 'category', ticks: { color: '#7A7060', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.05)' } },
-            y: { ticks: { color: '#7A7060', callback: v => v + ' €' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-          },
-        },
+            ...baseOptions.scales,
+            x: { ...baseOptions.scales.x, type: 'category' },
+            y: { ...baseOptions.scales.y, ticks: { ...baseOptions.scales.y.ticks, callback: v => v + ' €' } }
+          }
+        }
       })
-    } else if (chartType === 'winrate') {
-      const labels = activePlayers
-      const data = activePlayers.map(name => {
+    }
+
+    else if (chartType === 'winrate') {
+      const data = active.map(name => {
         const ps = filtered.filter(s => s.player_name === name)
         const wins = ps.filter(s => s.cash_out > s.buy_in).length
         return ps.length > 0 ? Math.round(wins / ps.length * 100) : 0
@@ -81,54 +148,59 @@ export default function Grafik({ sessions }) {
       chartRef.current = new Chart(ctx, {
         type: 'bar',
         data: {
-          labels,
+          labels: active,
           datasets: [{
-            label: 'Win Rate %',
+            label: 'Winrate %',
             data,
-            backgroundColor: activePlayers.map((_, i) => COLORS[i % COLORS.length] + 'CC'),
-            borderColor: activePlayers.map((_, i) => COLORS[i % COLORS.length]),
-            borderWidth: 1, borderRadius: 6,
-          }],
+            backgroundColor: active.map((_, i) => COLORS[i % COLORS.length] + 'BB'),
+            borderColor: active.map((_, i) => COLORS[i % COLORS.length]),
+            borderWidth: 2,
+            borderRadius: 8,
+            borderSkipped: false,
+          }]
         },
         options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
+          ...baseOptions,
+          plugins: { ...baseOptions.plugins, legend: { display: false } },
           scales: {
-            x: { ticks: { color: '#7A7060' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-            y: { min: 0, max: 100, ticks: { color: '#7A7060', callback: v => v + '%' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-          },
-        },
+            ...baseOptions.scales,
+            y: { ...baseOptions.scales.y, min: 0, max: 100, ticks: { ...baseOptions.scales.y.ticks, callback: v => v + '%' } }
+          }
+        }
       })
-    } else if (chartType === 'rebuy') {
-      const labels = activePlayers
-      const data = activePlayers.map(name =>
+    }
+
+    else if (chartType === 'rebuy') {
+      const data = active.map(name =>
         filtered.filter(s => s.player_name === name).reduce((sum, s) => sum + (s.rebuy_count || 0), 0)
       )
       chartRef.current = new Chart(ctx, {
         type: 'bar',
         data: {
-          labels,
+          labels: active,
           datasets: [{
             label: 'Rebuys gesamt',
             data,
-            backgroundColor: activePlayers.map((_, i) => COLORS[i % COLORS.length] + 'CC'),
-            borderColor: activePlayers.map((_, i) => COLORS[i % COLORS.length]),
-            borderWidth: 1, borderRadius: 6,
-          }],
+            backgroundColor: active.map((_, i) => COLORS[i % COLORS.length] + 'BB'),
+            borderColor: active.map((_, i) => COLORS[i % COLORS.length]),
+            borderWidth: 2,
+            borderRadius: 8,
+            borderSkipped: false,
+          }]
         },
         options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
+          ...baseOptions,
+          plugins: { ...baseOptions.plugins, legend: { display: false } },
           scales: {
-            x: { ticks: { color: '#7A7060' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-            y: { ticks: { color: '#7A7060' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-          },
-        },
+            ...baseOptions.scales,
+            y: { ...baseOptions.scales.y, ticks: { ...baseOptions.scales.y.ticks, stepSize: 1 } }
+          }
+        }
       })
     }
 
     return () => { if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null } }
-  }, [chartType, yearFilter, selectedPlayers.join(','), filtered.length])
+  }, [chartReady, chartType, yearFilter, selectedPlayers.join(','), filtered.length])
 
   return (
     <div style={{ padding: '20px 16px 100px' }}>
@@ -139,17 +211,19 @@ export default function Grafik({ sessions }) {
       </div>
 
       {/* Chart type */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
         {[
-          { id: 'cumulative', label: 'Profit' },
-          { id: 'winrate', label: 'Winrate' },
-          { id: 'rebuy', label: 'Rebuys' },
+          { id: 'cumulative', label: '📈 Profit' },
+          { id: 'winrate',    label: '🏆 Winrate' },
+          { id: 'rebuy',      label: '🔄 Rebuys' },
         ].map(m => (
           <button key={m.id} onClick={() => setChartType(m.id)} className="btn-ghost"
             style={{
+              flex: 1, textAlign: 'center',
               background: chartType === m.id ? 'rgba(201,168,76,0.2)' : undefined,
               borderColor: chartType === m.id ? 'rgba(201,168,76,0.5)' : undefined,
               color: chartType === m.id ? 'var(--gold-light)' : undefined,
+              fontSize: '0.7rem',
             }}>
             {m.label}
           </button>
@@ -161,8 +235,7 @@ export default function Grafik({ sessions }) {
         {[...years, 'all'].map(y => (
           <button key={y} onClick={() => setYearFilter(y)} className="btn-ghost"
             style={{
-              flex: 1,
-              textAlign: 'center',
+              flex: 1, textAlign: 'center',
               background: yearFilter === y ? 'rgba(201,168,76,0.2)' : undefined,
               borderColor: yearFilter === y ? 'rgba(201,168,76,0.5)' : undefined,
               color: yearFilter === y ? 'var(--gold-light)' : undefined,
@@ -173,44 +246,69 @@ export default function Grafik({ sessions }) {
       </div>
 
       {/* Player selector */}
-      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
-        {allPlayers.map((name, i) => (
-          <button key={name} onClick={() => togglePlayer(name)}
-            style={{
-              padding: '4px 12px', borderRadius: '20px', cursor: 'pointer',
-              border: `1px solid ${COLORS[i % COLORS.length]}`,
-              background: selectedPlayers.includes(name) ? COLORS[i % COLORS.length] + '33' : 'transparent',
-              color: selectedPlayers.includes(name) ? COLORS[i % COLORS.length] : 'var(--text-muted)',
-              fontSize: '0.8rem', transition: 'all 0.2s',
-            }}>
-            {name}
-          </button>
-        ))}
+      <div className="card" style={{ padding: '14px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <div className="section-label" style={{ marginBottom: 0 }}>
+            SPIELER ({selectedPlayers.length}/5)
+          </div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button className="btn-ghost" style={{ fontSize: '0.6rem', padding: '3px 8px' }}
+              onClick={() => setSelectedPlayers(playersByProfit.slice(0, 5))}>
+              Top 5
+            </button>
+            <button className="btn-ghost" style={{ fontSize: '0.6rem', padding: '3px 8px' }}
+              onClick={() => setSelectedPlayers([])}>
+              Keine
+            </button>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+          {playersByProfit.map((name, i) => {
+            const colorIdx = selectedPlayers.indexOf(name)
+            const isSelected = colorIdx !== -1
+            const color = isSelected ? COLORS[colorIdx % COLORS.length] : null
+            const disabled = !isSelected && selectedPlayers.length >= 5
+            return (
+              <button key={name} onClick={() => !disabled && togglePlayer(name)}
+                style={{
+                  padding: '5px 14px', borderRadius: '20px', cursor: disabled ? 'not-allowed' : 'pointer',
+                  border: `1.5px solid ${isSelected ? color : 'rgba(255,255,255,0.1)'}`,
+                  background: isSelected ? color + '22' : 'transparent',
+                  color: isSelected ? color : disabled ? 'rgba(255,255,255,0.2)' : 'var(--text-muted)',
+                  fontSize: '0.85rem', transition: 'all 0.15s',
+                  fontWeight: isSelected ? 600 : 400,
+                }}>
+                {isSelected && <span style={{ marginRight: '4px', fontSize: '0.7rem' }}>●</span>}
+                {name}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Chart */}
-      <div className="card" style={{ height: '320px', padding: '16px' }}>
-        {filtered.length === 0 ? (
-          <div className="empty-state" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            Noch keine Daten ♠
-          </div>
-        ) : (
-          <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
-        )}
+      <div className="card" style={{ padding: '16px' }}>
+        <div style={{ height: '300px', position: 'relative' }}>
+          {filtered.length === 0 ? (
+            <div className="empty-state" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              Noch keine Daten ♠
+            </div>
+          ) : selectedPlayers.length === 0 ? (
+            <div className="empty-state" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              Wähle mindestens einen Spieler aus
+            </div>
+          ) : (
+            <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
+          )}
+        </div>
       </div>
 
-      {/* Chart.js CDN loader */}
-      <ChartJsLoader />
+      {/* Max 5 hint */}
+      {selectedPlayers.length >= 5 && (
+        <div style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+          Maximum 5 Spieler gleichzeitig
+        </div>
+      )}
     </div>
   )
-}
-
-function ChartJsLoader() {
-  useEffect(() => {
-    if (window.Chart) return
-    const script = document.createElement('script')
-    script.src = 'https://cdn.jsdelivr.net/npm/chart.js'
-    document.head.appendChild(script)
-  }, [])
-  return null
 }
