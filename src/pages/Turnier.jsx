@@ -96,6 +96,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   const [view, setView] = useState('create')
   const [activeTournament, setActiveTournament] = useState(null)
   const [confirm, setConfirm] = useState(null)
+  const [detailTournament, setDetailTournament] = useState(null)
 
   // Create form
   const [tName, setTName] = useState('Poker Turnier')
@@ -635,6 +636,17 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                     <span style={{ fontSize:'0.85rem' }}>{medal}</span>
                     <span style={{ fontSize:'0.78rem',color:'#f87171',flex:1 }}>{p.name}</span>
                     {prize > 0 && <span style={{ fontFamily:'Cinzel,serif',fontSize:'0.78rem',color:'#4ade80' }}>+{prize}€</span>}
+                    <button onClick={() => setActiveTournament(prev => ({
+                      ...prev,
+                      players: prev.players.map(pl => pl.name === p.name ? {...pl, eliminated: false, place: null} : pl),
+                      results: (prev.results||[]).filter(r => r.name !== p.name),
+                    }))} style={{
+                      width:'22px',height:'22px',borderRadius:'50%',
+                      border:'1px solid rgba(74,222,128,0.5)',
+                      background:'rgba(74,222,128,0.12)',
+                      color:'#4ade80',fontSize:'0.9rem',cursor:'pointer',
+                      display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,
+                    }}>+</button>
                   </div>
                 )
               })}
@@ -654,7 +666,8 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
         <div>
           {tournaments.length === 0 && <div className="empty-state">Noch keine Turniere ♠</div>}
           {[...tournaments].sort((a,b)=>b.date?.localeCompare(a.date)).map(t => (
-            <div key={t.id} className="card" style={{ marginBottom:'12px',padding:'16px' }}>
+            <div key={t.id} className="card" style={{ marginBottom:'12px',padding:'16px',cursor:'pointer' }}
+              onClick={() => setDetailTournament(t)}>
               <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px' }}>
                 <div>
                   <div className="font-display" style={{ fontSize:'0.85rem',color:'var(--gold)' }}>{t.name}</div>
@@ -662,7 +675,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                     {formatDate(t.date)} · {(t.players||[]).length} Spieler · {formatEuro(t.buyin)} Buy-In
                   </div>
                 </div>
-                <button className="btn-danger" onClick={() => deleteTournament(t.id)}>✕</button>
+                <button className="btn-danger" onClick={e => { e.stopPropagation(); deleteTournament(t.id) }}>✕</button>
               </div>
               {(t.results||[]).slice(0,3).map(r => (
                 <div key={r.name} style={{ display:'flex',justifyContent:'space-between',fontSize:'0.85rem',padding:'4px 0' }}>
@@ -670,6 +683,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                   {r.payout > 0 && <span style={{ color:'#4ade80' }}>+{formatEuro(r.payout)}</span>}
                 </div>
               ))}
+              <div style={{ fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'6px',textAlign:'right',fontFamily:'Cinzel,serif',letterSpacing:'0.06em' }}>Details ▶</div>
             </div>
           ))}
         </div>
@@ -710,6 +724,73 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
               </div>
             ))
           })()}
+        </div>
+      )}
+
+      {/* Tournament Detail Modal */}
+      {detailTournament && (
+        <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:450,padding:'20px' }}
+          onClick={() => setDetailTournament(null)}>
+          <div className="card" style={{ maxWidth:'400px',width:'100%',padding:'24px',maxHeight:'85vh',overflowY:'auto' }}
+            onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="font-display" style={{ fontSize:'1rem',color:'var(--gold)',letterSpacing:'0.12em',marginBottom:'4px' }}>
+              🎰 {detailTournament.name}
+            </div>
+            <div style={{ fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'20px' }}>
+              {formatDate(detailTournament.date)}
+            </div>
+
+            {/* Quick stats */}
+            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'20px' }}>
+              {[
+                {label:'Spieler', value:(detailTournament.players||[]).length},
+                {label:'Buy-In', value:formatEuro(detailTournament.buyin)},
+                {label:'Pot', value:formatEuro((detailTournament.players||[]).length * detailTournament.buyin)},
+              ].map(s => (
+                <div key={s.label} style={{ textAlign:'center',padding:'10px 8px',borderRadius:'8px',background:'rgba(0,0,0,0.2)',border:'1px solid rgba(255,255,255,0.06)' }}>
+                  <div className="font-display" style={{ fontSize:'0.85rem',color:'var(--gold)' }}>{s.value}</div>
+                  <div style={{ fontSize:'0.6rem',color:'var(--text-muted)',marginTop:'2px',fontFamily:'Cinzel,serif',letterSpacing:'0.06em' }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Final Results */}
+            <div className="font-display" style={{ fontSize:'0.72rem',color:'var(--gold)',letterSpacing:'0.1em',marginBottom:'10px' }}>ENDERGEBNIS</div>
+            {[...(detailTournament.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).map(r => {
+              const medal = r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':`#${r.place}`
+              return (
+                <div key={r.name} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'10px 12px',borderRadius:'8px',marginBottom:'6px',background:r.place<=3?'rgba(201,168,76,0.06)':'rgba(0,0,0,0.15)',border:`1px solid ${r.place===1?'rgba(201,168,76,0.3)':r.place<=3?'rgba(201,168,76,0.15)':'rgba(255,255,255,0.05)'}` }}>
+                  <span style={{ fontSize:'1.1rem' }}>{medal}</span>
+                  {avatars[r.name] ? (
+                    <img src={avatars[r.name]} alt={r.name} style={{ width:'30px',height:'30px',borderRadius:'50%',objectFit:'cover',border:'1px solid rgba(201,168,76,0.3)' }} />
+                  ) : (
+                    <div style={{ width:'30px',height:'30px',borderRadius:'50%',background:'rgba(201,168,76,0.08)',border:'1px dashed rgba(201,168,76,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.9rem' }}>👤</div>
+                  )}
+                  <span style={{ flex:1,fontWeight:600,fontSize:'0.95rem' }}>{r.name}</span>
+                  {r.payout > 0 && <span className="font-display profit-pos" style={{ fontSize:'0.9rem' }}>+{formatEuro(r.payout)}</span>}
+                </div>
+              )
+            })}
+
+            {/* All players with rebuys */}
+            {(detailTournament.players||[]).some(p => (p.rebuys||0) > 0) && (
+              <>
+                <div className="font-display" style={{ fontSize:'0.72rem',color:'var(--gold)',letterSpacing:'0.1em',marginBottom:'10px',marginTop:'16px' }}>REBUYS</div>
+                {(detailTournament.players||[]).filter(p=>(p.rebuys||0)>0).map(p => (
+                  <div key={p.name} style={{ display:'flex',justifyContent:'space-between',fontSize:'0.85rem',padding:'6px 0',borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                    <span>{p.name}</span>
+                    <span style={{ color:'#f472b6',fontFamily:'Cinzel,serif' }}>{p.rebuys}× Rebuy</span>
+                  </div>
+                ))}
+              </>
+            )}
+
+            <button className="btn-ghost" style={{ width:'100%',marginTop:'20px' }} onClick={() => setDetailTournament(null)}>
+              Schließen
+            </button>
+          </div>
         </div>
       )}
 
