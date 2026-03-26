@@ -432,32 +432,72 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
           {/* Payouts */}
           <div className="card" style={{ marginBottom: '14px' }}>
             <div className="font-display" style={{ fontSize: '0.75rem', color: 'var(--gold)', letterSpacing: '0.1em', marginBottom: '12px' }}>AUSZAHLUNGSSTRUKTUR</div>
-            {payouts.map((p, i) => (
-              <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ minWidth: '20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>#{p.place}</span>
-                <input className="input-field" type="number" value={p.pct}
-                  onChange={e => setPayouts(prev => prev.map((po,idx) => idx===i ? {...po,pct:parseFloat(e.target.value)||0} : po))}
-                  style={{ flex: 1 }} />
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>%</span>
-                <span style={{ fontFamily: 'Cinzel, serif', fontSize: '0.8rem', color: 'var(--gold)', minWidth: '50px', textAlign: 'right' }}>
-                  {Math.round(tPlayers.length * parseFloat(tBuyin||20) * p.pct / 100)}€
-                </span>
-                <button className="btn-danger" onClick={() => setPayouts(prev => prev.filter((_,idx) => idx!==i))}>✕</button>
-              </div>
-            ))}
-            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+
+            {payouts.map((p, i) => {
+              const pot = tPlayers.length * parseFloat(tBuyin||20)
+              const euroVal = Math.round(pot * p.pct / 100)
+              return (
+                <div key={i} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                  <span style={{ minWidth: '24px', color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center' }}>
+                    {i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}
+                  </span>
+                  <input
+                    className="input-field"
+                    type="text"
+                    inputMode="decimal"
+                    value={p.pct === 0 ? '' : String(p.pct)}
+                    placeholder="0"
+                    onChange={e => {
+                      const raw = e.target.value.replace(',', '.')
+                      const val = raw === '' ? 0 : parseFloat(raw)
+                      setPayouts(prev => prev.map((po, idx) => idx === i ? {...po, pct: isNaN(val) ? 0 : val} : po))
+                    }}
+                    style={{ flex: 1, textAlign: 'center' }}
+                  />
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>%</span>
+                  <span style={{ fontFamily: 'Cinzel, serif', fontSize: '0.8rem', color: 'var(--gold)', minWidth: '48px', textAlign: 'right' }}>
+                    {tPlayers.length > 0 ? euroVal + '€' : '—'}
+                  </span>
+                  <button className="btn-danger" onClick={() => setPayouts(prev => prev.filter((_,idx) => idx!==i).map((po,idx)=>({...po,place:idx+1})))}>✕</button>
+                </div>
+              )
+            })}
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
               <button className="btn-ghost" style={{ flex: 1, fontSize: '0.65rem' }}
                 onClick={() => setPayouts(prev => [...prev, {place:prev.length+1,pct:0}])}>+ Platz</button>
               <button className="btn-ghost" style={{ flex: 1, fontSize: '0.65rem', color: '#60a5fa', borderColor: 'rgba(96,165,250,0.3)' }}
                 onClick={() => {
                   const n = payouts.length
-                  if (n === 1) setPayouts([{place:1,pct:100}])
-                  else if (n === 2) setPayouts([{place:1,pct:65},{place:2,pct:35}])
-                  else setPayouts([{place:1,pct:50},{place:2,pct:30},{place:3,pct:20}])
+                  const presets = {
+                    1:[100], 2:[65,35], 3:[50,30,20], 4:[45,28,17,10], 5:[40,25,17,11,7]
+                  }
+                  const pcts = presets[Math.min(n,5)] || (() => {
+                    // For >5 places: distribute evenly with top-heavy weighting
+                    const base = Math.floor(100 / n)
+                    const arr = Array(n).fill(base)
+                    let remainder = 100 - base * n
+                    for (let i = 0; i < remainder; i++) arr[i]++
+                    return arr
+                  })()
+                  setPayouts(pcts.map((pct,i) => ({place:i+1, pct})))
                 }}>⚡ Auto</button>
             </div>
-            <div style={{ fontSize: '0.75rem', color: payouts.reduce((s,p)=>s+p.pct,0)===100?'#4ade80':'#f87171', textAlign: 'right', marginTop: '6px' }}>
-              Gesamt: {payouts.reduce((s,p)=>s+p.pct,0)}%
+
+            {/* Auto preview per place count */}
+            <div style={{ marginTop: '10px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(96,165,250,0.05)', border: '1px solid rgba(96,165,250,0.15)', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+              <span style={{ fontFamily: 'Cinzel, serif', color: '#60a5fa', marginRight: '6px' }}>⚡ Auto:</span>
+              {payouts.length === 1 && '1. Platz: 100%'}
+              {payouts.length === 2 && '1. 65% · 2. 35%'}
+              {payouts.length === 3 && '1. 50% · 2. 30% · 3. 20%'}
+              {payouts.length === 4 && '1. 45% · 2. 28% · 3. 17% · 4. 10%'}
+              {payouts.length === 5 && '1. 40% · 2. 25% · 3. 17% · 4. 11% · 5. 7%'}
+              {payouts.length > 5 && 'Gleichmäßige Verteilung'}
+            </div>
+
+            <div style={{ fontSize: '0.75rem', color: payouts.reduce((s,p)=>s+(p.pct||0),0)===100?'#4ade80':'#f87171', textAlign: 'right', marginTop: '8px', fontFamily: 'Cinzel, serif' }}>
+              Gesamt: {payouts.reduce((s,p)=>s+(p.pct||0),0).toFixed(1)}%
+              {payouts.reduce((s,p)=>s+(p.pct||0),0)===100 && ' ✓'}
             </div>
           </div>
 
