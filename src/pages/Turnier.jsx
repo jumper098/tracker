@@ -259,6 +259,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       payout: payoutAmounts[r.place - 1] || 0
     }))
     const { error } = await db.from('poker_tournaments').insert([{
+      id: crypto.randomUUID(),
       name: activeTournament.name,
       date: activeTournament.date,
       buyin: activeTournament.buyin,
