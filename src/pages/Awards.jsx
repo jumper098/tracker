@@ -20,7 +20,7 @@ export default function Awards({ sessions, tournaments, avatars = {} }) {
     const yrs = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
     return yrs.length > 0 ? yrs[0] : 'all'
   })
-  const [selectedPlayer, setSelectedPlayer] = useState(null)
+  const [selectedPlayer, setSelectedPlayer] = useState('all')
   const [openTiers, setOpenTiers] = useState({ 1: true, 2: true, 3: true, 4: true })
 
   const years = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
@@ -67,8 +67,9 @@ export default function Awards({ sessions, tournaments, avatars = {} }) {
   // Filter achievements for selected player
   const displayAchs = evaluated.map(a => ({
     ...a,
-    unlocked: selectedPlayer ? a.holders.includes(selectedPlayer) : a.unlocked,
-    holders: selectedPlayer ? (a.holders.includes(selectedPlayer) ? [selectedPlayer] : []) : a.holders,
+    unlocked: selectedPlayer === 'all' ? a.unlocked : a.holders.includes(selectedPlayer),
+    holders: selectedPlayer === 'all' ? a.holders : (a.holders.includes(selectedPlayer) ? [selectedPlayer] : []),
+    showNames: selectedPlayer === 'all',
   }))
 
   // Sort players by badge count
@@ -108,13 +109,43 @@ export default function Awards({ sessions, tournaments, avatars = {} }) {
 
       {/* Player overview */}
       <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '8px', marginBottom: '20px' }}>
+
+        {/* Alle Button */}
+        <div
+          onClick={() => setSelectedPlayer('all')}
+          style={{
+            flexShrink: 0, width: '80px', textAlign: 'center', cursor: 'pointer',
+            padding: '12px 8px', borderRadius: '12px',
+            border: `1.5px solid ${selectedPlayer === 'all' ? 'rgba(201,168,76,0.6)' : 'rgba(201,168,76,0.15)'}`,
+            background: selectedPlayer === 'all' ? 'rgba(201,168,76,0.12)' : 'rgba(255,255,255,0.02)',
+            transition: 'all 0.2s',
+          }}>
+          <div style={{
+            width: '44px', height: '44px', borderRadius: '50%',
+            background: selectedPlayer === 'all' ? 'rgba(201,168,76,0.2)' : 'rgba(201,168,76,0.06)',
+            border: `2px solid ${selectedPlayer === 'all' ? 'var(--gold)' : 'rgba(201,168,76,0.25)'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '1.3rem', margin: '0 auto 6px',
+          }}>🃏</div>
+          <div style={{
+            fontSize: '0.7rem', fontWeight: 600, marginBottom: '6px',
+            color: selectedPlayer === 'all' ? 'var(--gold)' : 'var(--text-primary)',
+          }}>Alle</div>
+          <div style={{ height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '2px', overflow: 'hidden', marginBottom: '3px' }}>
+            <div style={{ height: '100%', borderRadius: '2px', width: '100%', background: selectedPlayer === 'all' ? 'var(--gold)' : 'rgba(201,168,76,0.3)' }} />
+          </div>
+          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+            {totalAchs}/{totalAchs}
+          </div>
+        </div>
+
         {sortedPlayers.map(name => {
           const count = playerBadgeCount[name] || 0
           const pct = Math.round((count / totalAchs) * 100)
           const isSelected = selectedPlayer === name
           return (
             <div key={name}
-              onClick={() => setSelectedPlayer(isSelected ? null : name)}
+              onClick={() => setSelectedPlayer(isSelected ? 'all' : name)}
               style={{
                 flexShrink: 0, width: '80px', textAlign: 'center', cursor: 'pointer',
                 padding: '12px 8px', borderRadius: '12px',
@@ -161,7 +192,7 @@ export default function Awards({ sessions, tournaments, avatars = {} }) {
       </div>
 
       {/* Selected player badge count */}
-      {selectedPlayer && (
+      {selectedPlayer && selectedPlayer !== 'all' && (
         <div style={{
           marginBottom: '16px', padding: '12px 16px', borderRadius: '10px',
           background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.25)',
@@ -233,7 +264,17 @@ export default function Awards({ sessions, tournaments, avatars = {} }) {
                       letterSpacing: '0.08em', color: a.unlocked ? 'var(--gold)' : 'var(--text-muted)',
                       marginBottom: '4px',
                     }}>{a.name}</div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.3 }}>{a.desc}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', lineHeight: 1.3, marginBottom: a.showNames && a.holders.length > 0 ? '6px' : 0 }}>{a.desc}</div>
+                    {a.showNames && a.unlocked && a.holders.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', justifyContent: 'center', marginTop: '6px' }}>
+                        {a.holders.map(h => (
+                          <span key={h} style={{
+                            background: 'rgba(201,168,76,0.15)', border: '1px solid rgba(201,168,76,0.3)',
+                            borderRadius: '10px', padding: '1px 7px', fontSize: '0.62rem', color: 'var(--gold)',
+                          }}>{h}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
