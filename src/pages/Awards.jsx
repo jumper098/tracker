@@ -192,6 +192,7 @@ export default function Awards({ sessions, tournaments, avatars = {} }) {
                 padding: '10px 14px', borderRadius: isOpen ? '10px 10px 0 0' : '10px',
                 background: TIER_COLORS[tier.level],
                 border: '1px solid rgba(255,255,255,0.08)',
+                borderBottom: isOpen ? 'none' : '1px solid rgba(255,255,255,0.08)',
                 cursor: 'pointer', userSelect: 'none',
               }}>
               <div style={{ fontFamily: 'Cinzel, serif', fontSize: '0.75rem', letterSpacing: '0.1em', color: 'var(--text-primary)' }}>
@@ -209,9 +210,11 @@ export default function Awards({ sessions, tournaments, avatars = {} }) {
             {isOpen && (
               <div style={{
                 display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px',
-                padding: '10px', background: 'rgba(0,0,0,0.2)',
-                border: '1px solid rgba(255,255,255,0.05)', borderTop: 'none',
+                padding: '10px', background: 'rgba(0,0,0,0.15)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderTop: 'none',
                 borderRadius: '0 0 10px 10px',
+                marginTop: '-1px',
               }}>
                 {/* Unlocked first, then locked */}
                 {[...tierAchs.filter(a => a.unlocked), ...tierAchs.filter(a => !a.unlocked)].map(a => (
