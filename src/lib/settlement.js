@@ -1,13 +1,11 @@
 /**
  * Calculates fair settlement for a poker night.
  * 
- * Handles two edge cases:
- * 1. Total profits > total buy-ins → proportionally reduce winnings
- * 2. Total profits < total buy-ins → reduce each loser's debt proportionally
+ * Rule: Losers always pay their full amount.
+ * If total winnings != total losses, winners get adjusted proportionally.
+ * (Both too much and too little won → scale winners to match total losses)
  */
 export function calcSettlement(nightSessions) {
-  const totalBuyins = nightSessions.reduce((s, e) => s + e.buy_in, 0)
-
   // Raw profits per player
   const rawProfits = {}
   nightSessions.forEach(s => {
@@ -18,23 +16,23 @@ export function calcSettlement(nightSessions) {
   const totalLosses   = Object.values(rawProfits).filter(p => p < 0).reduce((s, p) => s + Math.abs(p), 0)
 
   const adjusted = { ...rawProfits }
+  let adjustmentNote = null
 
-  if (totalWinnings > totalBuyins && totalWinnings > 0) {
-    // Case 1: Too much won — scale down winners proportionally
-    const factor = totalBuyins / totalWinnings
+  if (Math.abs(totalWinnings - totalLosses) > 0.01) {
+    // Scale winners up or down to match total losses
+    const factor = totalLosses / totalWinnings
     Object.keys(adjusted).forEach(name => {
       if (adjusted[name] > 0) adjusted[name] = Math.round(adjusted[name] * factor * 100) / 100
     })
-  } else if (totalLosses > totalWinnings && totalLosses > 0) {
-    // Case 2: Too little won — reduce each loser's debt proportionally
-    const missing = totalLosses - totalWinnings
-    const factor = totalWinnings / totalLosses // scale down losses
-    Object.keys(adjusted).forEach(name => {
-      if (adjusted[name] < 0) adjusted[name] = Math.round(adjusted[name] * factor * 100) / 100
-    })
+
+    if (totalWinnings > totalLosses) {
+      adjustmentNote = `Gewinne gekürzt: ${totalWinnings.toFixed(2)}€ → ${totalLosses.toFixed(2)}€ (Verlierer zahlen vollen Betrag)`
+    } else {
+      adjustmentNote = `Gewinne angepasst: ${totalWinnings.toFixed(2)}€ → ${totalLosses.toFixed(2)}€ (fehlende ${(totalLosses - totalWinnings).toFixed(2)}€ auf Gewinner aufgeteilt)`
+    }
   }
 
-  // Now calculate minimum transfers
+  // Calculate minimum transfers
   const creditors = []
   const debtors = []
   Object.entries(adjusted).forEach(([name, bal]) => {
@@ -59,13 +57,5 @@ export function calcSettlement(nightSessions) {
     if (d.amount < 0.005) di++
   }
 
-  // Info about adjustments
-  const wasAdjusted = totalWinnings !== totalLosses
-  const adjustmentNote = totalWinnings > totalBuyins
-    ? `Gewinne wurden von ${totalWinnings.toFixed(2)}€ auf ${totalBuyins.toFixed(2)}€ gekürzt`
-    : totalLosses > totalWinnings
-    ? `Verluste wurden um ${(totalLosses - totalWinnings).toFixed(2)}€ reduziert`
-    : null
-
-  return { transfers, wasAdjusted, adjustmentNote }
+  return { transfers, adjustmentNote }
 }
