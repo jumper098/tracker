@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const TABS = [
   { id: 'eintrag',   icon: '✚', label: 'Eintrag'   },
@@ -12,13 +12,18 @@ const TABS = [
 export default function TabBar({ active, onChange }) {
   const navRef = useRef(null)
 
+  const [hidden, setHidden] = useState(false)
+
   useEffect(() => {
     function updateBottom() {
-      if (navRef.current) {
-        // Use visualViewport if available (most reliable on mobile)
-        if (window.visualViewport) {
-          const vv = window.visualViewport
-          const bottom = window.innerHeight - vv.height - vv.offsetTop
+      if (!navRef.current) return
+      if (window.visualViewport) {
+        const vv = window.visualViewport
+        const bottom = window.innerHeight - vv.height - vv.offsetTop
+        // If keyboard is open (viewport significantly smaller), hide tab bar
+        const keyboardOpen = vv.height < window.innerHeight * 0.75
+        setHidden(keyboardOpen)
+        if (!keyboardOpen) {
           navRef.current.style.bottom = Math.max(0, bottom) + 'px'
         }
       }
@@ -41,7 +46,7 @@ export default function TabBar({ active, onChange }) {
   }, [])
 
   return (
-    <nav ref={navRef} className="tab-bar">
+    <nav ref={navRef} className="tab-bar" style={{ display: hidden ? 'none' : 'flex' }}>
       {TABS.map(t => (
         <button
           key={t.id}
