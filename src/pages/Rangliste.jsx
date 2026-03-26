@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { formatEuro, formatEuroSign, profitClass } from '../lib/helpers'
 
-export default function Rangliste({ sessions }) {
+export default function Rangliste({ sessions, avatars = {} }) {
   const [yearFilter, setYearFilter] = useState('all')
   const [sortMode, setSortMode] = useState('profit')
   const [h2hA, setH2hA] = useState('')
@@ -114,9 +114,22 @@ export default function Rangliste({ sessions }) {
       {sorted.map((p, i) => (
         <div key={p.name} className="card" style={{ marginBottom: '10px', padding: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ fontSize: i < 3 ? '1.5rem' : '1rem', minWidth: '32px', textAlign: 'center' }}>
+            <div style={{ fontSize: i < 3 ? '1.5rem' : '1rem', minWidth: '28px', textAlign: 'center' }}>
               {i < 3 ? MEDALS[i] : `#${i + 1}`}
             </div>
+            {avatars[p.name] ? (
+              <img src={avatars[p.name]} alt={p.name} style={{
+                width: '40px', height: '40px', borderRadius: '50%',
+                objectFit: 'cover', border: '2px solid rgba(201,168,76,0.35)', flexShrink: 0,
+              }} />
+            ) : (
+              <div style={{
+                width: '40px', height: '40px', borderRadius: '50%',
+                background: 'rgba(201,168,76,0.08)', border: '1px dashed rgba(201,168,76,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.1rem', flexShrink: 0,
+              }}>👤</div>
+            )}
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, fontSize: '1rem' }}>{p.name}</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
