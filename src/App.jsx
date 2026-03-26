@@ -25,7 +25,6 @@ export default function App() {
 
   useEffect(() => {
     loadAll()
-    // Realtime subscription
     const channel = db.channel('poker_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'poker_sessions' }, loadSessions)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'poker_tournaments' }, loadTournaments)
@@ -47,7 +46,6 @@ export default function App() {
       .order('date', { ascending: false })
     if (error) { setStatus('error'); return }
     setSessions(data || [])
-    // Auto-update player list from db
     if (data) {
       const dbPlayers = [...new Set(data.map(s => s.player_name))]
       setPlayers(prev => {
@@ -72,13 +70,31 @@ export default function App() {
     const updated = [...players, trimmed].sort()
     setPlayers(updated)
     localStorage.setItem('poker_players', JSON.stringify(updated))
-    showToast(`✓ ${trimmed} hinzugefügt`)
+    showToast('✓ ' + trimmed + ' hinzugefügt')
   }
 
   function removePlayer(name) {
     const updated = players.filter(p => p !== name)
     setPlayers(updated)
     localStorage.setItem('poker_players', JSON.stringify(updated))
+  }
+
+  async function renamePlayer(oldName, newName) {
+    // Update all sessions in Supabase
+    const { error } = await db
+      .from('poker_sessions')
+      .update({ player_name: newName })
+      .eq('player_name', oldName)
+    if (error) { showToast('Fehler: ' + error.message); return }
+
+    // Update local player list
+    const updated = players.map(p => p === oldName ? newName : p).sort()
+    setPlayers(updated)
+    localStorage.setItem('poker_players', JSON.stringify(updated))
+
+    // Reload sessions
+    await loadSessions()
+    showToast('✓ ' + oldName + ' → ' + newName)
   }
 
   const pages = { eintrag: Eintrag, sessions: Sessions, rangliste: Rangliste, grafik: Grafik, awards: Awards, turnier: Turnier }
@@ -88,11 +104,11 @@ export default function App() {
     <PasswordGate>
       {/* Status indicator */}
       <div style={{
-        position: 'fixed', top: '12px', right: '12px', zIndex: 200,
+        position: 'fixed', top: '10px', right: '10px', zIndex: 200,
         display: 'flex', alignItems: 'center', gap: '6px',
-        background: 'rgba(20,20,22,0.9)', border: '1px solid rgba(201,168,76,0.15)',
-        borderRadius: '20px', padding: '4px 10px',
-        fontFamily: 'Cinzel, serif', fontSize: '0.6rem', letterSpacing: '0.1em',
+        background: 'rgba(20,20,22,0.95)', border: '1px solid rgba(201,168,76,0.2)',
+        borderRadius: '20px', padding: '7px 12px',
+        fontFamily: 'Cinzel, serif', fontSize: '0.65rem', letterSpacing: '0.1em',
       }}>
         <div style={{
           width: '7px', height: '7px', borderRadius: '50%',
@@ -105,7 +121,13 @@ export default function App() {
       </div>
 
       {/* Player management button */}
-      <PlayerManager players={players} onAdd={addPlayer} onRemove={removePlayer} sessions={sessions} />
+      <PlayerManager
+        players={players}
+        onAdd={addPlayer}
+        onRemove={removePlayer}
+        onRename={renamePlayer}
+        sessions={sessions}
+      />
 
       {/* Main content */}
       <div style={{ minHeight: '100vh' }}>
@@ -137,22 +159,40 @@ export default function App() {
 }
 
 // ─── Player Manager Modal ────────────────────────────────────────────────────
-function PlayerManager({ players, onAdd, onRemove, sessions }) {
+function PlayerManager({ players, onAdd, onRemove, onRename, sessions }) {
   const [open, setOpen] = useState(false)
   const [newName, setNewName] = useState('')
+  const [renamingPlayer, setRenamingPlayer] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameLoading, setRenameLoading] = useState(false)
 
   const usedPlayers = new Set(sessions.map(s => s.player_name))
+
+  function startRename(name) {
+    setRenamingPlayer(name)
+    setRenameValue(name)
+  }
+
+  async function confirmRename() {
+    if (!renameValue.trim() || renameValue.trim() === renamingPlayer) {
+      setRenamingPlayer(null); return
+    }
+    setRenameLoading(true)
+    await onRename(renamingPlayer, renameValue.trim())
+    setRenameLoading(false)
+    setRenamingPlayer(null)
+  }
 
   return (
     <>
       <button
         onClick={() => setOpen(true)}
         style={{
-          position: 'fixed', top: '12px', left: '12px', zIndex: 200,
-          background: 'rgba(20,20,22,0.9)', border: '1px solid rgba(201,168,76,0.15)',
-          borderRadius: '20px', padding: '4px 10px',
-          fontFamily: 'Cinzel, serif', fontSize: '0.6rem',
-          color: 'var(--text-muted)', letterSpacing: '0.1em', cursor: 'pointer',
+          position: 'fixed', top: '10px', left: '10px', zIndex: 200,
+          background: 'rgba(20,20,22,0.95)', border: '1px solid rgba(201,168,76,0.3)',
+          borderRadius: '20px', padding: '7px 14px',
+          fontFamily: 'Cinzel, serif', fontSize: '0.7rem',
+          color: 'var(--gold)', letterSpacing: '0.1em', cursor: 'pointer',
         }}
       >
         👥 SPIELER
@@ -163,44 +203,69 @@ function PlayerManager({ players, onAdd, onRemove, sessions }) {
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 500, padding: '20px',
-        }} onClick={() => setOpen(false)}>
-          <div className="card" style={{ maxWidth: '360px', width: '100%', padding: '24px' }}
+        }} onClick={() => { setOpen(false); setRenamingPlayer(null) }}>
+          <div className="card" style={{ maxWidth: '380px', width: '100%', padding: '24px' }}
             onClick={e => e.stopPropagation()}>
-            <div className="font-display" style={{ fontSize: '0.85rem', color: 'var(--gold)', marginBottom: '16px', letterSpacing: '0.1em' }}>
+            <div className="font-display" style={{ fontSize: '0.9rem', color: 'var(--gold)', marginBottom: '16px', letterSpacing: '0.1em' }}>
               👥 SPIELER VERWALTEN
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            {/* Neuer Spieler */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
               <input className="input-field" placeholder="Neuer Spieler..." value={newName}
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { onAdd(newName); setNewName('') } }}
               />
-              <button className="btn-gold" style={{ padding: '10px 16px', flexShrink: 0 }}
+              <button className="btn-gold" style={{ padding: '10px 18px', flexShrink: 0 }}
                 onClick={() => { onAdd(newName); setNewName('') }}>+</button>
             </div>
 
-            <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+            {/* Spielerliste */}
+            <div style={{ maxHeight: '320px', overflowY: 'auto' }}>
               {players.map(p => (
-                <div key={p} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)',
-                }}>
-                  <span style={{ fontSize: '0.95rem' }}>{p}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {usedPlayers.has(p) && (
-                      <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                        {sessions.filter(s => s.player_name === p).length}× gespielt
-                      </span>
-                    )}
-                    {!usedPlayers.has(p) && (
-                      <button className="btn-danger" onClick={() => onRemove(p)}>✕</button>
-                    )}
-                  </div>
+                <div key={p} style={{ padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  {renamingPlayer === p ? (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        className="input-field"
+                        value={renameValue}
+                        onChange={e => setRenameValue(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') confirmRename() }}
+                        autoFocus
+                        style={{ flex: 1 }}
+                      />
+                      <button className="btn-gold" style={{ padding: '8px 12px', flexShrink: 0, fontSize: '0.75rem' }}
+                        onClick={confirmRename} disabled={renameLoading}>
+                        {renameLoading ? '…' : '✓'}
+                      </button>
+                      <button className="btn-ghost" style={{ padding: '8px 10px', flexShrink: 0 }}
+                        onClick={() => setRenamingPlayer(null)}>✕</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <div style={{ fontSize: '1rem' }}>{p}</div>
+                        {usedPlayers.has(p) && (
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            {sessions.filter(s => s.player_name === p).length}× gespielt
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn-ghost" style={{ padding: '5px 10px', fontSize: '0.75rem' }}
+                          onClick={() => startRename(p)}>✏️</button>
+                        {!usedPlayers.has(p) && (
+                          <button className="btn-danger" onClick={() => onRemove(p)}>✕</button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
 
-            <button className="btn-ghost" style={{ width: '100%', marginTop: '16px' }} onClick={() => setOpen(false)}>
+            <button className="btn-ghost" style={{ width: '100%', marginTop: '16px' }}
+              onClick={() => { setOpen(false); setRenamingPlayer(null) }}>
               Schließen
             </button>
           </div>

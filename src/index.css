@@ -179,6 +179,7 @@ body {
 
 /* Section label */
 .section-label {
+  font-size: 0.78rem;
   font-family: 'Cinzel', serif;
   font-size: 0.65rem;
   letter-spacing: 0.15em;
@@ -237,4 +238,13 @@ input[type="date"].input-field {
   color-scheme: dark;
   min-height: 44px;
   width: 100%;
+}
+
+/* Larger labels in forms */
+.section-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  display: block;
 }
