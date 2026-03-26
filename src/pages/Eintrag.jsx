@@ -59,7 +59,13 @@ export default function Eintrag({ players, onSessionAdded }) {
         {/* Date */}
         <div style={{ marginBottom: '16px' }}>
           <label className="section-label">Datum</label>
-          <input className="input-field" type="date" value={date} onChange={e => setDate(e.target.value)} />
+          <input
+            className="input-field"
+            type="date"
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            style={{ width: '100%', display: 'block', colorScheme: 'dark' }}
+          />
         </div>
 
         {/* Player */}
