@@ -29,10 +29,14 @@ export default function Grafik({ sessions }) {
     return profB - profA
   })
 
-  // Auto-select top 3 when year or players change
+  // Auto-select top 3 only on first load
+  const initialised = useRef(false)
   useEffect(() => {
-    setSelectedPlayers(playersByProfit.slice(0, 3))
-  }, [yearFilter, allPlayers.join(',')])
+    if (!initialised.current && playersByProfit.length > 0) {
+      setSelectedPlayers(playersByProfit.slice(0, 3))
+      initialised.current = true
+    }
+  }, [playersByProfit.join(',')])
 
   function togglePlayer(name) {
     setSelectedPlayers(prev => {
