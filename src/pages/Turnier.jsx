@@ -4,6 +4,49 @@ import { formatDate, formatEuro } from '../lib/helpers'
 import { showToast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 
+// Broadcast active tournament to all viewers via Supabase Realtime Presence
+function useTournamentBroadcast(activeTournament, setActiveTournament, setView, currentLevel, timeLeft, paused) {
+  const channelRef = useRef(null)
+
+  useEffect(() => {
+    const channel = db.channel('live_tournament', { config: { presence: { key: 'host' } } })
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState()
+        const host = state['host']?.[0]
+        if (host?.tournament && !activeTournament) {
+          // Someone else is hosting — show their tournament as read-only
+          setActiveTournament({ ...host.tournament, readOnly: true })
+          setView('live')
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED' && activeTournament && !activeTournament.readOnly) {
+          await channel.track({
+            tournament: activeTournament,
+            level: currentLevel,
+            timeLeft,
+            paused,
+          })
+        }
+      })
+
+    channelRef.current = channel
+    return () => { db.removeChannel(channel) }
+  }, [])
+
+  // Update presence when tournament state changes
+  useEffect(() => {
+    if (channelRef.current && activeTournament && !activeTournament.readOnly) {
+      channelRef.current.track({ tournament: activeTournament, level: currentLevel, timeLeft, paused })
+        .catch(() => {})
+    }
+  }, [activeTournament?.players, currentLevel, timeLeft, paused])
+
+  return channelRef
+}
+
 // ─── Blind Presets ────────────────────────────────────────────────────────────
 const BLIND_PRESETS = {
   turbo: {
@@ -40,7 +83,7 @@ const BLIND_PRESETS = {
 }
 
 export default function Turnier({ sessions, tournaments, onRefresh, players, avatars = {} }) {
-  const [view, setView] = useState('home')
+  const [view, setView] = useState('create')
   const [activeTournament, setActiveTournament] = useState(null)
   const [confirm, setConfirm] = useState(null)
 
@@ -140,6 +183,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     setCurrentLevel(0)
     startTimerFor(0, t)
     setView('live')
+    // Notify others via Supabase realtime (they see via shared state)
   }
 
   function addRebuy(name) {
@@ -208,7 +252,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     if (error) { showToast('Fehler: ' + error.message); return }
     showToast('✓ Turnier gespeichert!')
     setActiveTournament(null)
-    setView('home')
+    setView('create')
     onRefresh()
   }
 
@@ -252,41 +296,24 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       {/* Sub nav */}
       {view !== 'live' && (
         <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
-          {[{id:'home',label:'🏠 Home'},{id:'create',label:'✚ Erstellen'},{id:'history',label:'📋 Verlauf'},{id:'rankings',label:'🏆 Rangliste'}].map(v => (
+          {[
+            ...(activeTournament ? [{id:'live',label:'🔴 Live'}] : []),
+            {id:'create',label:'✚ Erstellen'},
+            {id:'history',label:'📋 Verlauf'},
+            {id:'rankings',label:'🏆 Rangliste'},
+          ].map(v => (
             <button key={v.id} onClick={() => setView(v.id)} className="btn-ghost"
               style={{
                 flex:1, textAlign:'center', fontSize:'0.65rem',
                 background: view===v.id ? 'rgba(201,168,76,0.2)' : undefined,
-                borderColor: view===v.id ? 'rgba(201,168,76,0.5)' : undefined,
-                color: view===v.id ? 'var(--gold-light)' : undefined,
+                borderColor: v.id==='live' ? 'rgba(248,113,113,0.5)' : view===v.id ? 'rgba(201,168,76,0.5)' : undefined,
+                color: v.id==='live' ? '#f87171' : view===v.id ? 'var(--gold-light)' : undefined,
               }}>{v.label}</button>
           ))}
         </div>
       )}
 
-      {/* ── HOME ── */}
-      {view === 'home' && (
-        <div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
-            <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
-              <div className="font-display" style={{ fontSize: '1.4rem', color: 'var(--gold)' }}>{tournaments.length}</div>
-              <div className="section-label" style={{ marginBottom: 0 }}>Turniere</div>
-            </div>
-            <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
-              <div className="font-display" style={{ fontSize: '0.85rem', color: 'var(--gold)' }}>{topWinner ? `${topWinner[0]} (${topWinner[1]}×)` : '—'}</div>
-              <div className="section-label" style={{ marginBottom: 0 }}>Top Gewinner</div>
-            </div>
-          </div>
-          {activeTournament && (
-            <div className="card" style={{ marginBottom: '16px', padding: '16px', border: '1px solid rgba(201,168,76,0.4)' }}>
-              <div className="font-display" style={{ fontSize: '0.8rem', color: 'var(--gold)', marginBottom: '8px' }}>🎰 LAUFENDES TURNIER</div>
-              <div style={{ marginBottom: '12px' }}>{activeTournament.name}</div>
-              <button className="btn-gold" style={{ width: '100%' }} onClick={() => setView('live')}>▶ Zum Live-View</button>
-            </div>
-          )}
-          <button className="btn-gold" style={{ width: '100%' }} onClick={() => setView('create')}>✚ Neues Turnier erstellen</button>
-        </div>
-      )}
+
 
       {/* ── CREATE ── */}
       {view === 'create' && (
@@ -592,7 +619,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
           )}
 
           <div style={{ display:'flex',gap:'10px' }}>
-            <button className="btn-ghost" style={{ flex:1 }} onClick={() => setView('home')}>← Zurück</button>
+            <button className="btn-ghost" style={{ flex:1 }} onClick={() => setView('create')}>← Zurück</button>
             <button style={{ flex:1,background:'rgba(192,57,43,0.1)',color:'#e74c3c',border:'1px solid rgba(192,57,43,0.35)',borderRadius:'10px',padding:'13px',fontFamily:'Cinzel,serif',fontSize:'0.72rem',letterSpacing:'0.1em',cursor:'pointer' }}
               onClick={endTournament}>✕ Beenden & Speichern</button>
           </div>
