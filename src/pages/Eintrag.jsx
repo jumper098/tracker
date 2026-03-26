@@ -64,7 +64,14 @@ export default function Eintrag({ players, onSessionAdded }) {
             type="date"
             value={date}
             onChange={e => setDate(e.target.value)}
-            style={{ width: '100%', display: 'block', colorScheme: 'dark' }}
+            style={{
+              width: '100%',
+              display: 'block',
+              colorScheme: 'dark',
+              boxSizing: 'border-box',
+              WebkitAppearance: 'none',
+              appearance: 'none',
+            }}
           />
         </div>
 

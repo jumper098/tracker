@@ -225,3 +225,16 @@ body {
 @media (max-width: 480px) {
   .tab-btn { font-size: 0.55rem; }
 }
+
+/* Mobile input fix */
+.input-field {
+  box-sizing: border-box;
+  display: block;
+  -webkit-appearance: none;
+  appearance: none;
+}
+input[type="date"].input-field {
+  color-scheme: dark;
+  min-height: 44px;
+  width: 100%;
+}
