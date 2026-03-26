@@ -1,27 +1,23 @@
 import { useState } from 'react'
 import { formatEuro, formatEuroSign, formatDate, profitClass } from '../lib/helpers'
 
-const MEDALS = ['🥇', '🥈', '🥉']
-
 export default function Rangliste({ sessions, avatars = {} }) {
   const [yearFilter, setYearFilter] = useState('all')
-  const [sortMode, setSortMode] = useState('profit')
   const [expanded, setExpanded] = useState({})
   const [h2hA, setH2hA] = useState('')
   const [h2hB, setH2hB] = useState('')
 
-  function toggleExpand(name) {
-    setExpanded(prev => ({ ...prev, [name]: !prev[name] }))
-  }
-
   const years = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
   const filtered = yearFilter === 'all' ? sessions : sessions.filter(s => s.date.startsWith(yearFilter))
 
+  // Build player stats
   const statsMap = {}
   filtered.forEach(s => {
     if (!statsMap[s.player_name]) statsMap[s.player_name] = {
       name: s.player_name, sessions: 0, profit: 0, wins: 0, losses: 0,
-      buyin: 0, bestWin: -Infinity, worstLoss: Infinity, rebuys: 0,
+      buyin: 0, rebuys: 0,
+      bestWin: -Infinity, bestWinDate: null,
+      worstLoss: Infinity, worstLossDate: null,
     }
     const p = statsMap[s.player_name]
     const profit = s.cash_out - s.buy_in
@@ -31,25 +27,36 @@ export default function Rangliste({ sessions, avatars = {} }) {
     p.rebuys += (s.rebuy_count || 0)
     if (profit > 0) p.wins++
     if (profit < 0) p.losses++
-    if (profit > p.bestWin) p.bestWin = profit
-    if (profit < p.worstLoss) p.worstLoss = profit
+    if (profit > p.bestWin) { p.bestWin = profit; p.bestWinDate = s.date }
+    if (profit < p.worstLoss) { p.worstLoss = profit; p.worstLossDate = s.date }
   })
 
   const players = Object.values(statsMap)
   players.forEach(p => {
     p.winRate = p.sessions > 0 ? (p.wins / p.sessions * 100) : 0
     p.avgProfit = p.sessions > 0 ? p.profit / p.sessions : 0
+
+    // Win/Loss streaks
+    const ps = filtered.filter(s => s.player_name === p.name).sort((a, b) => a.date.localeCompare(b.date))
+    let curWin = 0, maxWin = 0, curLoss = 0, maxLoss = 0
+    ps.forEach(s => {
+      const profit = s.cash_out - s.buy_in
+      if (profit > 0) { curWin++; maxWin = Math.max(maxWin, curWin); curLoss = 0 }
+      else if (profit < 0) { curLoss++; maxLoss = Math.max(maxLoss, curLoss); curWin = 0 }
+      else { curWin = 0; curLoss = 0 }
+    })
+    p.longestWinStreak = maxWin
+    p.longestLossStreak = maxLoss
   })
 
-  const sorted = [...players].sort((a, b) => {
-    if (sortMode === 'profit') return b.profit - a.profit
-    if (sortMode === 'winrate') return b.winRate - a.winRate
-    if (sortMode === 'sessions') return b.sessions - a.sessions
-    return 0
-  })
-
+  const sorted = [...players].sort((a, b) => b.profit - a.profit)
   const allPlayerNames = [...new Set(sessions.map(s => s.player_name))].sort()
 
+  function toggleExpand(name) {
+    setExpanded(prev => ({ ...prev, [name]: !prev[name] }))
+  }
+
+  // H2H calculation
   function calcH2H(nameA, nameB) {
     const byDate = {}
     sessions.forEach(s => { if (!byDate[s.date]) byDate[s.date] = {}; byDate[s.date][s.player_name] = s })
@@ -67,6 +74,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
   }
 
   const h2h = (h2hA && h2hB && h2hA !== h2hB) ? calcH2H(h2hA, h2hB) : null
+  const MEDALS = ['🥇', '🥈', '🥉']
 
   return (
     <div style={{ padding: '20px 16px 100px' }}>
@@ -77,7 +85,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
       </div>
 
       {/* Year filter */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', overflowX: 'auto', paddingBottom: '4px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '4px' }}>
         {['all', ...years].map(y => (
           <button key={y} onClick={() => setYearFilter(y)} className="btn-ghost"
             style={{
@@ -91,19 +99,16 @@ export default function Rangliste({ sessions, avatars = {} }) {
         ))}
       </div>
 
-
-
       {/* Leaderboard */}
       {sorted.length === 0 && <div className="empty-state">Noch keine Daten ♠</div>}
 
       {sorted.map((p, i) => {
         const isOpen = expanded[p.name]
         return (
-          <div key={p.name} className="card"
-            style={{ marginBottom: '10px', padding: '0', cursor: 'pointer' }}
+          <div key={p.name} className="card" style={{ marginBottom: '10px', padding: '0', cursor: 'pointer' }}
             onClick={() => toggleExpand(p.name)}>
 
-            {/* Always visible */}
+            {/* Always visible row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px' }}>
               <div style={{ fontSize: i < 3 ? '1.4rem' : '0.9rem', minWidth: '28px', textAlign: 'center', flexShrink: 0 }}>
                 {i < 3 ? MEDALS[i] : `#${i + 1}`}
@@ -141,25 +146,49 @@ export default function Rangliste({ sessions, avatars = {} }) {
             {isOpen && (
               <div style={{ borderTop: '1px solid rgba(201,168,76,0.1)', padding: '14px 16px' }}
                 onClick={e => e.stopPropagation()}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '14px' }}>
+
+                {/* Stats grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '10px' }}>
                   {[
                     { label: 'Sessions', value: p.sessions },
                     { label: 'Siege', value: p.wins },
                     { label: 'Niederlagen', value: p.losses },
                     { label: 'Winrate', value: p.winRate.toFixed(0) + '%' },
                     { label: 'Rebuys', value: p.rebuys },
-                    { label: 'Best Win', value: p.bestWin !== -Infinity ? formatEuroSign(p.bestWin) : '—' },
+                    { label: 'Gesamt Buy-In', value: formatEuro(p.buyin) },
+                    { label: 'Win Streak 🔥', value: p.longestWinStreak + '×' },
+                    { label: 'Loss Streak 💀', value: p.longestLossStreak + '×' },
                   ].map(s => (
                     <div key={s.label} style={{
                       background: 'rgba(0,0,0,0.2)', borderRadius: '8px',
                       padding: '10px 8px', textAlign: 'center',
                       border: '1px solid rgba(255,255,255,0.04)',
                     }}>
-                      <div className="font-display" style={{ fontSize: '0.9rem', color: 'var(--gold)' }}>{s.value}</div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em' }}>{s.label}</div>
+                      <div className="font-display" style={{ fontSize: '0.85rem', color: 'var(--gold)' }}>{s.value}</div>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '3px', fontFamily: 'Cinzel, serif', letterSpacing: '0.06em' }}>{s.label}</div>
                     </div>
                   ))}
                 </div>
+
+                {/* Best / Worst session */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em', marginBottom: '4px' }}>BESTE SESSION</div>
+                    <div className="font-display profit-pos" style={{ fontSize: '0.95rem' }}>
+                      {p.bestWin !== -Infinity ? formatEuroSign(p.bestWin) : '—'}
+                    </div>
+                    {p.bestWinDate && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '3px' }}>{formatDate(p.bestWinDate)}</div>}
+                  </div>
+                  <div style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em', marginBottom: '4px' }}>SCHLECHTESTE</div>
+                    <div className="font-display profit-neg" style={{ fontSize: '0.95rem' }}>
+                      {p.worstLoss !== Infinity ? formatEuroSign(p.worstLoss) : '—'}
+                    </div>
+                    {p.worstLossDate && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '3px' }}>{formatDate(p.worstLossDate)}</div>}
+                  </div>
+                </div>
+
+                {/* Win/Loss bar */}
                 {p.sessions > 0 && (
                   <div>
                     <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', height: '8px', marginBottom: '4px' }}>
