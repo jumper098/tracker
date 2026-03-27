@@ -5,88 +5,93 @@ import { formatDate, formatEuro } from '../lib/helpers'
 import { showToast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 
-// Sync live tournament to/from Supabase live_tournament table
-function useLiveTournamentSync(activeTournament, setActiveTournament, setView, currentLevel, timeLeft, paused) {
+// Realtime sync hook for live tournament
+// Uses timestamp-based timer so all devices show the same time
+function useLiveTournamentSync(
+  activeTournament, setActiveTournament,
+  setView, currentLevel, setCurrentLevel,
+  timeLeft, setTimeLeft, paused, setPaused,
+  pausedRef, timerRef, startTimerFor
+) {
   const isHostRef = useRef(false)
+  const lastSyncRef = useRef(0)
 
-  // On mount: check if there's a live tournament in DB
+  function applyLiveData(d, forceApply = false) {
+    if (!d?.tournament) return
+    const t = d.tournament
+    const level = typeof t.timerLevel === 'number' ? t.timerLevel : 0
+    const totalSecs = (t.blinds[level]?.duration || 20) * 60
+
+    let remaining
+    if (t.timerPaused) {
+      remaining = Math.max(0, totalSecs - (t.timerElapsed || 0))
+    } else if (t.timerStartedAt) {
+      const additionalElapsed = Math.floor((Date.now() - t.timerStartedAt) / 1000)
+      remaining = Math.max(0, totalSecs - (t.timerElapsed || 0) - additionalElapsed)
+    } else {
+      remaining = totalSecs
+    }
+
+    setActiveTournament(forceApply ? { ...t, readOnly: !isHostRef.current } : prev => {
+      if (!prev || prev.readOnly) return { ...t, readOnly: true }
+      return { ...prev, ...t, readOnly: false }
+    })
+    setCurrentLevel(level)
+    setTimeLeft(remaining)
+    setPaused(t.timerPaused || false)
+    pausedRef.current = t.timerPaused || false
+    setView('live')
+
+    // Restart local interval
+    if (timerRef.current) clearInterval(timerRef.current)
+    if (!t.timerPaused && remaining > 0) {
+      timerRef.current = setInterval(() => {
+        if (pausedRef.current) return
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current)
+            setCurrentLevel(lvl => {
+              const next = lvl + 1
+              if (next < t.blinds.length) {
+                showToast(t.blinds[next].pause ? '☕ Pause!' : '🔔 Nächstes Level!')
+                setTimeout(() => startTimerFor(next, t), 100)
+                return next
+              }
+              showToast('🏁 Letztes Level!')
+              return lvl
+            })
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+  }
+
   useEffect(() => {
+    // Initial load
     async function checkLive() {
       try {
         const { data } = await db.from('live_tournament').select('data').eq('id', 'current').single()
-        if (!data?.data) return
-
-        const t = { ...data.data.tournament, readOnly: true }
-        const level = typeof t.timerLevel === 'number' ? t.timerLevel : (data.data.level || 0)
-
-        // Calculate correct remaining time RIGHT NOW before any state updates
-        const totalSecs = (t.blinds[level]?.duration || 20) * 60
-        let remaining
-
-        if (t.timerPaused) {
-          // Was paused — show exact remaining time
-          remaining = Math.max(0, totalSecs - (t.timerElapsed || 0))
-        } else if (t.timerStartedAt) {
-          // Was running — calculate elapsed since last start
-          const additionalElapsed = Math.floor((Date.now() - t.timerStartedAt) / 1000)
-          remaining = Math.max(0, totalSecs - (t.timerElapsed || 0) - additionalElapsed)
-        } else {
-          remaining = totalSecs
-        }
-
-        // Set all state
-        setActiveTournament(t)
-        setCurrentLevel(level)
-        setTimeLeft(remaining)
-        setPaused(t.timerPaused || false)
-        pausedRef.current = t.timerPaused || false
-        setView('live')
-
-        // Start interval only if not paused
-        if (!t.timerPaused && remaining > 0) {
-          if (timerRef.current) clearInterval(timerRef.current)
-          timerRef.current = setInterval(() => {
-            if (pausedRef.current) return
-            setTimeLeft(prev => {
-              if (prev <= 1) {
-                clearInterval(timerRef.current)
-                setCurrentLevel(lvl => {
-                  const next = lvl + 1
-                  if (next < t.blinds.length) {
-                    showToast(t.blinds[next].pause ? '☕ Pause!' : '🔔 Nächstes Level!')
-                    setTimeout(() => startTimerFor(next, t), 100)
-                    return next
-                  }
-                  showToast('🏁 Letztes Level!')
-                  return lvl
-                })
-                return 0
-              }
-              return prev - 1
-            })
-          }, 1000)
-        }
-      } catch(e) {
-        console.warn('checkLive error:', e)
-      }
+        if (data?.data) applyLiveData(data.data, true)
+      } catch(e) {}
     }
     checkLive()
 
-    // Subscribe to realtime changes on live_tournament
-    const channel = db.channel('live_tournament_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_tournament' }, (payload) => {
-        if (isHostRef.current) return // Host doesn't need to react to own updates
+    // Realtime subscription — all devices get updates instantly
+    const channel = db.channel('live_tournament_rt')
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'live_tournament'
+      }, (payload) => {
+        if (isHostRef.current) return // host already has latest state
         const d = payload.new?.data
-        if (d?.tournament) {
-          setActiveTournament(prev => {
-            if (!prev || prev.readOnly) return { ...d.tournament, readOnly: true }
-            return prev
-          })
-          setView('live')
-        } else if (!d) {
+        if (d) {
+          applyLiveData(d, false)
+        } else {
           // Tournament ended
-          setActiveTournament(prev => prev?.readOnly ? null : prev)
-          setView(prev => prev === 'live' ? 'create' : prev)
+          if (timerRef.current) clearInterval(timerRef.current)
+          setActiveTournament(null)
+          setView('create')
         }
       })
       .subscribe()
@@ -94,20 +99,25 @@ function useLiveTournamentSync(activeTournament, setActiveTournament, setView, c
     return () => { db.removeChannel(channel) }
   }, [])
 
-  // When host updates tournament state, push to DB (throttled)
-  const lastSyncRef = useRef(0)
+  // Host pushes state to DB whenever something changes
   useEffect(() => {
     if (!activeTournament || activeTournament.readOnly) return
     isHostRef.current = true
     const now = Date.now()
-    if (now - lastSyncRef.current < 2000) return // max once per 2 seconds
+    if (now - lastSyncRef.current < 1500) return
     lastSyncRef.current = now
     db.from('live_tournament').upsert({
       id: 'current',
-      data: { tournament: activeTournament, level: currentLevel, timeLeft, paused },
+      data: { tournament: activeTournament },
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' }).then(() => {})
-  }, [JSON.stringify(activeTournament?.players), currentLevel, Math.floor(timeLeft / 10)])
+    }, { onConflict: 'id' }).catch(() => {})
+  }, [
+    JSON.stringify(activeTournament?.players),
+    activeTournament?.timerLevel,
+    activeTournament?.timerPaused,
+    activeTournament?.timerElapsed,
+    activeTournament?.timerStartedAt,
+  ])
 }
 
 // ─── Blind Presets ────────────────────────────────────────────────────────────
@@ -171,7 +181,12 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   const elapsedRef = useRef(0)
 
   // Live sync
-  useLiveTournamentSync(activeTournament, setActiveTournament, setView, currentLevel, timeLeft, paused)
+  useLiveTournamentSync(
+    activeTournament, setActiveTournament,
+    setView, currentLevel, setCurrentLevel,
+    timeLeft, setTimeLeft, paused, setPaused,
+    pausedRef, timerRef, startTimerFor
+  )
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
