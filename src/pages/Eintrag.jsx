@@ -9,15 +9,26 @@ export default function Eintrag({ players, onSessionAdded }) {
   const [player, setPlayer] = useState('')
   const [buyin, setBuyin] = useState('')
   const [cashout, setCashout] = useState('')
-  const [rebuys, setRebuys] = useState([])
+  const [rebuys, setRebuys] = useState([]) // array of amounts
+  const [showRebuyDialog, setShowRebuyDialog] = useState(false)
+  const [rebuyAmount, setRebuyAmount] = useState('20')
   const [loading, setLoading] = useState(false)
 
-  const totalBuyin = parseFloat(buyin || 0) + rebuys.reduce((s, r) => s + parseFloat(r || 0), 0)
+  const totalBuyin = parseFloat(buyin || 0) + rebuys.reduce((s, r) => s + r, 0)
   const profit = parseFloat(cashout || 0) - totalBuyin
   const showPreview = buyin !== '' && cashout !== ''
 
-  function addRebuy() { setRebuys([...rebuys, '']) }
-  function updateRebuy(i, val) { const r = [...rebuys]; r[i] = val; setRebuys(r) }
+  function openRebuyDialog() {
+    setRebuyAmount('20')
+    setShowRebuyDialog(true)
+  }
+  function confirmRebuy() {
+    const amt = parseFloat(rebuyAmount)
+    if (!isNaN(amt) && amt > 0) {
+      setRebuys([...rebuys, amt])
+    }
+    setShowRebuyDialog(false)
+  }
   function removeRebuy(i) { setRebuys(rebuys.filter((_, idx) => idx !== i)) }
 
   async function handleSubmit() {
@@ -25,8 +36,8 @@ export default function Eintrag({ players, onSessionAdded }) {
       showToast('⚠ Bitte alle Felder ausfüllen'); return
     }
     setLoading(true)
-    const rebuyCount = rebuys.filter(r => parseFloat(r) > 0).length
-    const rebuyTotal = rebuys.reduce((s, r) => s + parseFloat(r || 0), 0)
+    const rebuyCount = rebuys.length
+    const rebuyTotal = rebuys.reduce((s, r) => s + r, 0)
 
     const { error } = await db.from('poker_sessions').insert([{
       date,
@@ -94,23 +105,30 @@ export default function Eintrag({ players, onSessionAdded }) {
         </div>
 
         {/* Rebuys */}
-        {rebuys.map((r, i) => (
-          <div key={i} style={{ marginBottom: '10px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <div style={{ flex: 1 }}>
-              <label className="section-label">Rebuy {i + 1} (€)</label>
-              <input
-                className="input-field" type="number" placeholder="0.00" step="0.01" min="0"
-                value={r} onChange={e => updateRebuy(i, e.target.value)}
-              />
+        {rebuys.length > 0 && (
+          <div style={{ marginBottom: '12px' }}>
+            <label className="section-label">Rebuys ({rebuys.length}×)</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {rebuys.map((r, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  background: 'rgba(244,114,182,0.08)', border: '1px solid rgba(244,114,182,0.3)',
+                  borderRadius: '20px', padding: '4px 10px 4px 12px',
+                }}>
+                  <span style={{ fontFamily: 'Cinzel, serif', fontSize: '0.8rem', color: '#f472b6' }}>
+                    {r.toFixed(2)}€
+                  </span>
+                  <button onClick={() => removeRebuy(i)} style={{
+                    background: 'none', border: 'none', color: 'rgba(244,114,182,0.6)',
+                    cursor: 'pointer', fontSize: '0.85rem', lineHeight: 1, padding: 0,
+                  }}>✕</button>
+                </div>
+              ))}
             </div>
-            <button onClick={() => removeRebuy(i)} style={{
-              marginTop: '20px', background: 'none', border: 'none',
-              color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem',
-            }}>✕</button>
           </div>
-        ))}
+        )}
 
-        <button onClick={addRebuy} className="btn-ghost" style={{ width: '100%', marginBottom: '16px', fontSize: '0.7rem' }}>
+        <button onClick={openRebuyDialog} className="btn-ghost" style={{ width: '100%', marginBottom: '16px', fontSize: '0.7rem', borderColor: 'rgba(244,114,182,0.3)', color: '#f472b6' }}>
           + REBUY HINZUFÜGEN
         </button>
 
@@ -153,6 +171,50 @@ export default function Eintrag({ players, onSessionAdded }) {
           {loading ? '…' : '♠ Eintrag speichern'}
         </button>
       </div>
+
+      {/* Rebuy Dialog */}
+      {showRebuyDialog && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 500, padding: '20px',
+        }} onClick={() => setShowRebuyDialog(false)}>
+          <div className="card" style={{ maxWidth: '320px', width: '100%', padding: '24px' }}
+            onClick={e => e.stopPropagation()}>
+            <div className="font-display" style={{ fontSize: '0.9rem', color: '#f472b6', letterSpacing: '0.1em', marginBottom: '6px' }}>
+              🔄 REBUY HINZUFÜGEN
+            </div>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Rebuy {rebuys.length + 1} für <strong style={{ color: 'var(--text-primary)' }}>{player || '—'}</strong>
+            </div>
+
+            <label className="section-label">Betrag (€)</label>
+            <input
+              className="input-field"
+              type="text"
+              inputMode="decimal"
+              value={rebuyAmount}
+              onChange={e => setRebuyAmount(e.target.value)}
+              onFocus={e => e.target.select()}
+              autoFocus
+              style={{ marginBottom: '8px', fontSize: '1.3rem', textAlign: 'center' }}
+            />
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '20px' }}>
+              Standard: 20€ — Betrag anpassen falls nötig
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button className="btn-ghost" style={{ flex: 1 }} onClick={() => setShowRebuyDialog(false)}>
+                Abbrechen
+              </button>
+              <button className="btn-gold" style={{ flex: 1, borderColor: 'rgba(244,114,182,0.5)', background: 'rgba(244,114,182,0.15)', color: '#f472b6' }}
+                onClick={confirmRebuy}>
+                ✓ Bestätigen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
