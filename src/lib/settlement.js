@@ -1,13 +1,9 @@
 /**
- * Calculates fair settlement for a poker night.
- * 
- * If losses > wins (someone undercounted cashout):
- *   → Difference split equally among all losers
- *   → Each loser pays equally less
- * 
- * If wins > losses (someone overcounted cashout):
- *   → Difference split equally among all winners
- *   → Each winner gets equally less
+ * Settlement logic:
+ * - Winners always get their FULL profit
+ * - Losers together pay exactly the total winnings
+ * - If losses > winnings: difference split equally among losers (each pays less)
+ * - If winnings > losses: difference split equally among winners (each gets less)
  */
 export function calcSettlement(nightSessions) {
   const rawProfits = {}
@@ -22,29 +18,28 @@ export function calcSettlement(nightSessions) {
   let adjustmentNote = null
 
   if (Math.abs(totalWinnings - totalLosses) > 0.01) {
-    const diff = totalLosses - totalWinnings // positive = losses > wins
-
-    if (diff > 0) {
-      // Losses > Wins: split difference equally among losers → each pays less
+    if (totalLosses > totalWinnings) {
+      // Losses > Winnings → split difference equally among losers, winners get full amount
+      const diff = totalLosses - totalWinnings
       const losers = Object.keys(adjusted).filter(n => adjusted[n] < 0)
-      const reduction = diff / losers.length
+      const reduction = Math.round((diff / losers.length) * 100) / 100
       losers.forEach(name => {
         adjusted[name] = Math.round((adjusted[name] + reduction) * 100) / 100
       })
-      adjustmentNote = `${diff.toFixed(2)}€ gleichmäßig auf ${losers.length} Verlierer aufgeteilt — jeder zahlt ${reduction.toFixed(2)}€ weniger`
+      adjustmentNote = `${diff.toFixed(2)}€ auf ${losers.length} Verlierer aufgeteilt — jeder zahlt ${reduction.toFixed(2)}€ weniger · Gewinner erhalten vollen Betrag`
     } else {
-      // Wins > Losses: split difference equally among winners → each gets less
-      const absDiff = Math.abs(diff)
+      // Winnings > Losses → split difference equally among winners, losers pay full amount
+      const diff = totalWinnings - totalLosses
       const winners = Object.keys(adjusted).filter(n => adjusted[n] > 0)
-      const reduction = absDiff / winners.length
+      const reduction = Math.round((diff / winners.length) * 100) / 100
       winners.forEach(name => {
         adjusted[name] = Math.round((adjusted[name] - reduction) * 100) / 100
       })
-      adjustmentNote = `${absDiff.toFixed(2)}€ gleichmäßig auf ${winners.length} Gewinner aufgeteilt — jeder bekommt ${reduction.toFixed(2)}€ weniger`
+      adjustmentNote = `${diff.toFixed(2)}€ auf ${winners.length} Gewinner aufgeteilt — jeder bekommt ${reduction.toFixed(2)}€ weniger · Verlierer zahlen vollen Betrag`
     }
   }
 
-  // Calculate minimum transfers
+  // Minimum transfers
   const creditors = []
   const debtors = []
   Object.entries(adjusted).forEach(([name, bal]) => {
@@ -59,12 +54,10 @@ export function calcSettlement(nightSessions) {
   const transfers = []
   let ci = 0, di = 0
   while (ci < creditors.length && di < debtors.length) {
-    const c = creditors[ci]
-    const d = debtors[di]
+    const c = creditors[ci], d = debtors[di]
     const amount = Math.min(c.amount, d.amount)
     transfers.push({ from: d.name, to: c.name, amount: Math.round(amount * 100) / 100 })
-    c.amount -= amount
-    d.amount -= amount
+    c.amount -= amount; d.amount -= amount
     if (c.amount < 0.005) ci++
     if (d.amount < 0.005) di++
   }
