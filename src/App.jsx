@@ -1,4 +1,4 @@
-import Avatar from '../components/Avatar'
+import Avatar from './components/Avatar'
 import { useState, useEffect } from 'react'
 import { db } from './lib/supabase'
 import { useAvatars } from './hooks/useAvatars'
