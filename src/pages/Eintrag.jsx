@@ -11,7 +11,7 @@ export default function Eintrag({ players, onSessionAdded }) {
   const [cashout, setCashout] = useState('')
   const [rebuys, setRebuys] = useState([]) // array of amounts
   const [showRebuyDialog, setShowRebuyDialog] = useState(false)
-  const [rebuyAmounts, setRebuyAmounts] = useState(['20', '', ''])
+  const [rebuyAmounts, setRebuyAmounts] = useState(['20', '0'])
   const [loading, setLoading] = useState(false)
 
   const totalBuyin = parseFloat(buyin || 0) + rebuys.reduce((s, r) => s + r, 0)
@@ -19,7 +19,7 @@ export default function Eintrag({ players, onSessionAdded }) {
   const showPreview = buyin !== '' && cashout !== ''
 
   function openRebuyDialog() {
-    setRebuyAmounts(['20', '', ''])
+    setRebuyAmounts(['20', '0'])
     setShowRebuyDialog(true)
   }
   function confirmRebuy() {
@@ -209,9 +209,13 @@ export default function Eintrag({ players, onSessionAdded }) {
                 />
               </div>
             ))}
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '16px' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '12px' }}>
               Standard 20€ — Betrag anpassen falls nötig
             </div>
+            <button className="btn-ghost" style={{ width: '100%', marginBottom: '16px', fontSize: '0.68rem' }}
+              onClick={() => setRebuyAmounts(prev => [...prev, ''])}>
+              + Noch einen hinzufügen
+            </button>
 
             <div style={{ display: 'flex', gap: '10px' }}>
               <button className="btn-ghost" style={{ flex: 1 }} onClick={() => setShowRebuyDialog(false)}>
