@@ -12,11 +12,22 @@ function useLiveTournamentSync(activeTournament, setActiveTournament, setView, c
   // On mount: check if there's a live tournament in DB
   useEffect(() => {
     async function checkLive() {
-      const { data } = await db.from('live_tournament').select('data').eq('id', 'current').single()
-      if (data?.data && !activeTournament) {
-        setActiveTournament({ ...data.data.tournament, readOnly: true })
-        setView('live')
-      }
+      try {
+        const { data } = await db.from('live_tournament').select('data').eq('id', 'current').single()
+        if (data?.data && !activeTournament) {
+          const t = { ...data.data.tournament, readOnly: true }
+          const level = t.timerLevel || data.data.level || 0
+          setActiveTournament(t)
+          setCurrentLevel(level)
+          setView('live')
+          // Resume timer with full elapsed state
+          setTimeout(() => startTimerFor(level, t, {
+            elapsedSeconds: t.timerElapsed || 0,
+            startedAt: t.timerStartedAt || null,
+            paused: t.timerPaused || false,
+          }), 100)
+        }
+      } catch(e) {}
     }
     checkLive()
 
@@ -116,18 +127,52 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   const [paused, setPaused] = useState(false)
   const timerRef = useRef(null)
   const pausedRef = useRef(false)
+  const elapsedRef = useRef(0)
 
   // Live sync
   useLiveTournamentSync(activeTournament, setActiveTournament, setView, currentLevel, timeLeft, paused)
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
-  function startTimerFor(level, t) {
+  function startTimerFor(level, t, resumeFrom = null) {
+    // resumeFrom = { elapsedSeconds, startedAt, paused }
     if (timerRef.current) clearInterval(timerRef.current)
-    const secs = (t.blinds[level].duration || 20) * 60
-    setTimeLeft(secs)
-    pausedRef.current = false
-    setPaused(false)
+    const totalSecs = (t.blinds[level].duration || 20) * 60
+
+    let remaining
+    if (resumeFrom) {
+      if (resumeFrom.paused) {
+        // Was paused — show remaining time without counting
+        remaining = Math.max(0, totalSecs - (resumeFrom.elapsedSeconds || 0))
+        pausedRef.current = true
+        setPaused(true)
+      } else {
+        // Was running — calculate how much has passed since startedAt
+        const additionalElapsed = resumeFrom.startedAt
+          ? Math.floor((Date.now() - resumeFrom.startedAt) / 1000)
+          : 0
+        remaining = Math.max(0, totalSecs - (resumeFrom.elapsedSeconds || 0) - additionalElapsed)
+        pausedRef.current = false
+        setPaused(false)
+      }
+    } else {
+      remaining = totalSecs
+      pausedRef.current = false
+      setPaused(false)
+    }
+
+    setTimeLeft(remaining)
+    elapsedRef.current = resumeFrom?.elapsedSeconds || 0
+
+    // Save state to tournament for persistence
+    setActiveTournament(prev => prev ? {
+      ...prev,
+      timerLevel: level,
+      timerElapsed: resumeFrom?.elapsedSeconds || 0,
+      timerStartedAt: resumeFrom?.paused ? null : Date.now(),
+      timerPaused: resumeFrom?.paused || false,
+    } : prev)
+
     timerRef.current = setInterval(() => {
       if (pausedRef.current) return
       setTimeLeft(prev => {
@@ -151,8 +196,21 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   }
 
   function toggleTimer() {
-    pausedRef.current = !pausedRef.current
-    setPaused(pausedRef.current)
+    const nowPaused = !pausedRef.current
+    pausedRef.current = nowPaused
+    setPaused(nowPaused)
+    setActiveTournament(prev => {
+      if (!prev) return prev
+      const totalSecs = (prev.blinds[currentLevel]?.duration || 20) * 60
+      const currentRemaining = timeLeft
+      const elapsed = totalSecs - currentRemaining
+      return {
+        ...prev,
+        timerPaused: nowPaused,
+        timerElapsed: elapsed,
+        timerStartedAt: nowPaused ? null : Date.now(),
+      }
+    })
   }
 
   function applyPreset(key) {
@@ -426,8 +484,25 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
             <div style={{ display: 'flex', gap: '8px' }}>
               <button className="btn-ghost" style={{ flex: 1, fontSize: '0.65rem' }}
                 onClick={() => setBlinds(prev => [...prev, {sb:'',bb:'',duration:20}])}>+ Level</button>
-              <button className="btn-ghost" style={{ flex: 1, fontSize: '0.65rem', color: '#60a5fa', borderColor: 'rgba(96,165,250,0.3)' }}
-                onClick={() => setBlinds(prev => [...prev, {pause:true,duration:10}])}>☕ Pause</button>
+              <select
+                className="input-field"
+                style={{ flex: 1, fontSize: '0.65rem', color: '#60a5fa', borderColor: 'rgba(96,165,250,0.3)', padding: '8px', cursor: 'pointer' }}
+                value=""
+                onChange={e => {
+                  const idx = parseInt(e.target.value)
+                  if (isNaN(idx)) return
+                  setBlinds(prev => {
+                    const next = [...prev]
+                    next.splice(idx + 1, 0, {pause: true, duration: 10})
+                    return next
+                  })
+                  e.target.value = ""
+                }}>
+                <option value="">☕ Pause nach Level...</option>
+                {blinds.map((b, i) => !b.pause && (
+                  <option key={i} value={i}>Nach Level {blinds.slice(0,i+1).filter(b=>!b.pause).length} ({b.sb}/{b.bb})</option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -874,8 +949,8 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
             </div>
             <div style={{ display:'flex',gap:'10px' }}>
               <button className="btn-ghost" style={{ flex:1 }} onClick={() => setRebuyConfirm(null)}>Abbrechen</button>
-              <button style={{ flex:1,padding:'12px',borderRadius:'10px',border:'1px solid rgba(244,114,182,0.5)',background:'rgba(244,114,182,0.15)',color:'#f472b6',fontFamily:'Cinzel,serif',fontSize:'0.78rem',cursor:'pointer' }}
-                onClick={() => { addRebuy(rebuyConfirm); setRebuyConfirm(null) }}>
+              <button className="btn-ghost" style={{ flex:1, borderColor:'rgba(244,114,182,0.5)', color:'#f472b6' }}
+                onClick={(e) => { e.stopPropagation(); addRebuy(rebuyConfirm); setRebuyConfirm(null) }}>
                 ✓ Bestätigen
               </button>
             </div>
