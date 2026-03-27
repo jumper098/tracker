@@ -98,6 +98,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   const [activeTournament, setActiveTournament] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [detailTournament, setDetailTournament] = useState(null)
+  const [rebuyConfirm, setRebuyConfirm] = useState(null) // player name waiting for rebuy confirm
 
   // Create form
   const [tName, setTName] = useState('Poker Turnier')
@@ -406,7 +407,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '24px 1fr 1fr 56px 32px', gap: '4px', alignItems: 'center' }}>
                   <div style={{ textAlign: 'center', fontSize: '0.65rem', color: 'var(--text-muted)' }}>{b.pause ? '☕' : i+1}</div>
                   {b.pause ? (
-                    <div style={{ gridColumn: '2/4', fontSize: '0.8rem', color: '#60a5fa', padding: '6px 8px' }}>PAUSE</div>
+                    <div style={{ gridColumn: '2/4', fontSize: '0.75rem', color: '#60a5fa', padding: '6px 8px', fontFamily: 'Cinzel, serif', letterSpacing: '0.1em' }}>☕ PAUSE</div>
                   ) : (
                     <>
                       <input className="input-field" type="number" value={b.sb} style={{ padding: '6px 8px', textAlign: 'center' }}
@@ -616,18 +617,37 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
           </div>
 
           {/* Pot summary */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '14px' }}>
-            {[
-              {label:'GESAMTPOT', value: totalPot+'€', color:'var(--gold)'},
-              {label:'BUY-INS', value: activeTournament.players.length, color:'#4ade80'},
-              {label:'REBUYS', value: totalRebuys, color:'#f472b6'},
-            ].map(s => (
-              <div key={s.label} style={{ textAlign:'center', padding:'10px 8px', borderRadius:'10px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
-                <div style={{ fontSize:'0.48rem', color:'var(--text-muted)', letterSpacing:'0.1em', marginBottom:'4px', fontFamily:'Cinzel,serif' }}>{s.label}</div>
-                <div className="font-display" style={{ fontSize:'1.4rem', color:s.color, lineHeight:1 }}>{s.value}</div>
-              </div>
-            ))}
-          </div>
+          {(() => {
+            const activePlayers = activeTournament.players.filter(p => !p.eliminated).length
+            const totalChips = (activeTournament.players.length + totalRebuys) * activeTournament.chips
+            const avgStack = activePlayers > 0 ? Math.round(totalChips / activePlayers) : 0
+            return (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                  {[
+                    {label:'GESAMTPOT', value: totalPot+'€', color:'var(--gold)'},
+                    {label:'BUY-INS', value: activeTournament.players.length, color:'#4ade80'},
+                    {label:'REBUYS', value: totalRebuys, color:'#f472b6'},
+                  ].map(s => (
+                    <div key={s.label} style={{ textAlign:'center', padding:'10px 8px', borderRadius:'10px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
+                      <div style={{ fontSize:'0.48rem', color:'var(--text-muted)', letterSpacing:'0.1em', marginBottom:'4px', fontFamily:'Cinzel,serif' }}>{s.label}</div>
+                      <div className="font-display" style={{ fontSize:'1.4rem', color:s.color, lineHeight:1 }}>{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
+                  <div style={{ textAlign:'center', padding:'8px', borderRadius:'10px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize:'0.48rem', color:'var(--text-muted)', letterSpacing:'0.1em', marginBottom:'4px', fontFamily:'Cinzel,serif' }}>CHIPS IM UMLAUF</div>
+                    <div className="font-display" style={{ fontSize:'1rem', color:'#38bdf8', lineHeight:1 }}>{totalChips.toLocaleString()}</div>
+                  </div>
+                  <div style={{ textAlign:'center', padding:'8px', borderRadius:'10px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ fontSize:'0.48rem', color:'var(--text-muted)', letterSpacing:'0.1em', marginBottom:'4px', fontFamily:'Cinzel,serif' }}>Ø STACK</div>
+                    <div className="font-display" style={{ fontSize:'1rem', color:'#38bdf8', lineHeight:1 }}>{avgStack.toLocaleString()}</div>
+                  </div>
+                </div>
+              </>
+            )
+          })()}
 
           {/* Payout preview */}
           {activeTournament.payouts.some(p=>p.pct>0) && (
@@ -663,7 +683,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                       <button onClick={() => removeRebuy(p.name)} style={{ width:'18px',height:'18px',borderRadius:'50%',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontSize:'0.7rem',cursor:'pointer',flexShrink:0 }}>−</button>
                     </>
                   )}
-                  <button onClick={() => addRebuy(p.name)} style={{ width:'18px',height:'18px',borderRadius:'50%',border:'1px solid rgba(244,114,182,0.4)',background:'rgba(244,114,182,0.1)',color:'#f472b6',fontSize:'0.7rem',cursor:'pointer',flexShrink:0 }}>+</button>
+                  <button onClick={() => setRebuyConfirm(p.name)} style={{ width:'18px',height:'18px',borderRadius:'50%',border:'1px solid rgba(244,114,182,0.4)',background:'rgba(244,114,182,0.1)',color:'#f472b6',fontSize:'0.7rem',cursor:'pointer',flexShrink:0 }}>+</button>
                   <button onClick={() => eliminatePlayer(p.name)} style={{ padding:'2px 5px',borderRadius:'5px',border:'1px solid rgba(248,113,113,0.3)',background:'rgba(248,113,113,0.08)',color:'#f87171',fontSize:'0.62rem',cursor:'pointer',flexShrink:0 }}>✕</button>
                 </div>
               ))}
@@ -836,6 +856,29 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
             <button className="btn-ghost" style={{ width:'100%',marginTop:'20px' }} onClick={() => setDetailTournament(null)}>
               Schließen
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Rebuy confirmation */}
+      {rebuyConfirm && (
+        <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.8)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:450,padding:'20px' }}
+          onClick={() => setRebuyConfirm(null)}>
+          <div className="card" style={{ maxWidth:'320px',width:'100%',padding:'24px',textAlign:'center' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:'2rem', marginBottom:'8px' }}>🔄</div>
+            <div className="font-display" style={{ fontSize:'0.9rem',color:'#f472b6',letterSpacing:'0.1em',marginBottom:'6px' }}>REBUY</div>
+            <div style={{ fontSize:'0.95rem',marginBottom:'6px' }}>{rebuyConfirm}</div>
+            <div style={{ fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'20px' }}>
+              +{activeTournament?.buyin}€ · {activeTournament?.chips.toLocaleString()} Chips
+            </div>
+            <div style={{ display:'flex',gap:'10px' }}>
+              <button className="btn-ghost" style={{ flex:1 }} onClick={() => setRebuyConfirm(null)}>Abbrechen</button>
+              <button style={{ flex:1,padding:'12px',borderRadius:'10px',border:'1px solid rgba(244,114,182,0.5)',background:'rgba(244,114,182,0.15)',color:'#f472b6',fontFamily:'Cinzel,serif',fontSize:'0.78rem',cursor:'pointer' }}
+                onClick={() => { addRebuy(rebuyConfirm); setRebuyConfirm(null) }}>
+                ✓ Bestätigen
+              </button>
+            </div>
           </div>
         </div>
       )}
