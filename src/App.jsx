@@ -1,3 +1,4 @@
+import Avatar from '../components/Avatar'
 import { useState, useEffect } from 'react'
 import { db } from './lib/supabase'
 import { useAvatars } from './hooks/useAvatars'
@@ -227,19 +228,7 @@ function PlayerManager({ players, onAdd, onRemove, onRename, sessions, avatars, 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       {/* Avatar */}
                       <label style={{ cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
-                        {avatars[p] ? (
-                          <img src={avatars[p]} alt={p} style={{
-                            width: '40px', height: '40px', borderRadius: '50%',
-                            objectFit: 'cover', border: '2px solid rgba(201,168,76,0.4)',
-                          }} />
-                        ) : (
-                          <div style={{
-                            width: '40px', height: '40px', borderRadius: '50%',
-                            background: 'rgba(201,168,76,0.1)', border: '2px dashed rgba(201,168,76,0.3)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '1.1rem',
-                          }}>👤</div>
-                        )}
+                          <Avatar name={p} src={avatars[p]} size={40} />
                         <input type="file" accept="image/*" style={{ display: 'none' }}
                           onChange={e => { if (e.target.files[0]) onUploadAvatar(p, e.target.files[0]) }} />
                         <div style={{

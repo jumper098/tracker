@@ -4,6 +4,7 @@ import { formatDate, formatEuro, formatEuroSign, profitClass } from '../lib/help
 import { calcSettlement } from '../lib/settlement'
 import { showToast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
+import Avatar from '../components/Avatar'
 
 export default function Sessions({ sessions, onRefresh, avatars = {} }) {
   const [openNights, setOpenNights] = useState({})
@@ -152,6 +153,57 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
         </div>
       </div>
 
+      {/* Top 3 Last Night */}
+      {(() => {
+        const lastNightDate = filteredDates[0]
+        if (!lastNightDate) return null
+        const lastNight = byDate[lastNightDate]
+        const top3 = [...lastNight]
+          .sort((a, b) => (b.cash_out - b.buy_in) - (a.cash_out - a.buy_in))
+          .slice(0, 3)
+        return (
+          <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div className="font-display" style={{ fontSize: '0.72rem', color: 'var(--gold)', letterSpacing: '0.12em' }}>
+                🃏 LETZTER ABEND
+              </div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                {formatDate(lastNightDate)}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {top3.map((s, i) => {
+                const profit = s.cash_out - s.buy_in
+                const medals = ['🥇', '🥈', '🥉']
+                return (
+                  <div key={s.id} style={{
+                    flex: 1, textAlign: 'center', padding: '12px 6px',
+                    borderRadius: '10px',
+                    background: i === 0 ? 'rgba(201,168,76,0.08)' : 'rgba(255,255,255,0.02)',
+                    border: `1px solid ${i === 0 ? 'rgba(201,168,76,0.25)' : 'rgba(255,255,255,0.05)'}`,
+                  }}>
+                    <div style={{ marginBottom: '6px' }}>
+                      <Avatar name={s.player_name} src={avatars[s.player_name]} size={38} style={{ margin: '0 auto' }} />
+                    </div>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 600, marginBottom: '3px',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      color: i === 0 ? 'var(--gold)' : 'var(--text-primary)' }}>
+                      {s.player_name}
+                    </div>
+                    <div style={{ fontSize: '0.75rem' }}>
+                      {medals[i]}
+                    </div>
+                    <div className={`font-display ${profitClass(profit)}`} style={{ fontSize: '0.78rem', marginTop: '2px' }}>
+                      {profit >= 0 ? '+' : ''}{profit.toFixed(0)}€
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Quick stats */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
         <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
@@ -199,8 +251,25 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
                   {formatDate(date)}
                   {photoUrl && <span style={{ marginLeft: '8px', fontSize: '0.8rem' }}>📷</span>}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  {night.length} Spieler · Pot {formatEuro(potTotal)}
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                  Pot {formatEuro(potTotal)}
+                </div>
+                {/* Player chips */}
+                <div style={{ display: 'flex', marginTop: '6px', gap: '0' }}>
+                  {night.slice(0,6).map((s, i) => (
+                    <div key={s.id} style={{ marginLeft: i === 0 ? 0 : '-8px', zIndex: night.length - i }}>
+                      <Avatar name={s.player_name} src={avatars[s.player_name]} size={24}
+                        style={{ border: '1.5px solid rgba(20,20,22,0.9)' }} />
+                    </div>
+                  ))}
+                  {night.length > 6 && (
+                    <div style={{
+                      marginLeft: '-8px', width: '24px', height: '24px', borderRadius: '50%',
+                      background: 'rgba(201,168,76,0.15)', border: '1.5px solid rgba(20,20,22,0.9)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.5rem', color: 'var(--gold)', fontFamily: 'Cinzel, serif', zIndex: 0,
+                    }}>+{night.length - 6}</div>
+                  )}
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

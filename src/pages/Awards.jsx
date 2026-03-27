@@ -1,3 +1,4 @@
+import Avatar from '../components/Avatar'
 import { useState } from 'react'
 import { ACHIEVEMENTS } from '../lib/achievements'
 
@@ -154,20 +155,7 @@ export default function Awards({ sessions, tournaments, avatars = {} }) {
                 transition: 'all 0.2s',
               }}>
               {/* Avatar */}
-              {avatars[name] ? (
-                <img src={avatars[name]} alt={name} style={{
-                  width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover',
-                  border: `2px solid ${isSelected ? 'var(--gold)' : 'rgba(201,168,76,0.3)'}`,
-                  margin: '0 auto 6px', display: 'block',
-                }} />
-              ) : (
-                <div style={{
-                  width: '44px', height: '44px', borderRadius: '50%',
-                  background: 'rgba(201,168,76,0.08)', border: `2px dashed ${isSelected ? 'var(--gold)' : 'rgba(201,168,76,0.25)'}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '1.2rem', margin: '0 auto 6px',
-                }}>👤</div>
-              )}
+              <Avatar name={name} src={avatars[name]} size={44} style={{ margin: '0 auto 6px', display: 'block' }} />
               {/* Name */}
               <div style={{
                 fontSize: '0.7rem', fontWeight: 600, marginBottom: '6px',

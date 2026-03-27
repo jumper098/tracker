@@ -1,3 +1,4 @@
+import Avatar from '../components/Avatar'
 import { useState } from 'react'
 import { formatEuro, formatEuroSign, formatDate, profitClass } from '../lib/helpers'
 
