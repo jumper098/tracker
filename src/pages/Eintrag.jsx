@@ -11,7 +11,7 @@ export default function Eintrag({ players, onSessionAdded }) {
   const [cashout, setCashout] = useState('')
   const [rebuys, setRebuys] = useState([]) // array of amounts
   const [showRebuyDialog, setShowRebuyDialog] = useState(false)
-  const [rebuyAmount, setRebuyAmount] = useState('20')
+  const [rebuyAmounts, setRebuyAmounts] = useState(['20', '', ''])
   const [loading, setLoading] = useState(false)
 
   const totalBuyin = parseFloat(buyin || 0) + rebuys.reduce((s, r) => s + r, 0)
@@ -19,13 +19,15 @@ export default function Eintrag({ players, onSessionAdded }) {
   const showPreview = buyin !== '' && cashout !== ''
 
   function openRebuyDialog() {
-    setRebuyAmount('20')
+    setRebuyAmounts(['20', '', ''])
     setShowRebuyDialog(true)
   }
   function confirmRebuy() {
-    const amt = parseFloat(rebuyAmount)
-    if (!isNaN(amt) && amt > 0) {
-      setRebuys([...rebuys, amt])
+    const newRebuys = rebuyAmounts
+      .map(r => parseFloat(r))
+      .filter(r => !isNaN(r) && r > 0)
+    if (newRebuys.length > 0) {
+      setRebuys(prev => [...prev, ...newRebuys])
     }
     setShowRebuyDialog(false)
   }
@@ -188,19 +190,27 @@ export default function Eintrag({ players, onSessionAdded }) {
               Rebuy {rebuys.length + 1} für <strong style={{ color: 'var(--text-primary)' }}>{player || '—'}</strong>
             </div>
 
-            <label className="section-label">Betrag (€)</label>
-            <input
-              className="input-field"
-              type="text"
-              inputMode="decimal"
-              value={rebuyAmount}
-              onChange={e => setRebuyAmount(e.target.value)}
-              onFocus={e => e.target.select()}
-              autoFocus
-              style={{ marginBottom: '8px', fontSize: '1.3rem', textAlign: 'center' }}
-            />
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '20px' }}>
-              Standard: 20€ — Betrag anpassen falls nötig
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
+              Felder leer lassen wenn kein weiterer Rebuy
+            </div>
+            {rebuyAmounts.map((amt, i) => (
+              <div key={i} style={{ marginBottom: '10px' }}>
+                <label className="section-label">Rebuy {rebuys.length + i + 1} (€)</label>
+                <input
+                  className="input-field"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={amt}
+                  onChange={e => setRebuyAmounts(prev => prev.map((v, idx) => idx === i ? e.target.value : v))}
+                  onFocus={e => e.target.select()}
+                  autoFocus={i === 0}
+                  style={{ textAlign: 'center', fontSize: '1.1rem' }}
+                />
+              </div>
+            ))}
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '16px' }}>
+              Standard 20€ — Betrag anpassen falls nötig
             </div>
 
             <div style={{ display: 'flex', gap: '10px' }}>
