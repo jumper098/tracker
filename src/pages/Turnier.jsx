@@ -14,20 +14,61 @@ function useLiveTournamentSync(activeTournament, setActiveTournament, setView, c
     async function checkLive() {
       try {
         const { data } = await db.from('live_tournament').select('data').eq('id', 'current').single()
-        if (data?.data && !activeTournament) {
-          const t = { ...data.data.tournament, readOnly: true }
-          const level = t.timerLevel || data.data.level || 0
-          setActiveTournament(t)
-          setCurrentLevel(level)
-          setView('live')
-          // Resume timer with full elapsed state
-          setTimeout(() => startTimerFor(level, t, {
-            elapsedSeconds: t.timerElapsed || 0,
-            startedAt: t.timerStartedAt || null,
-            paused: t.timerPaused || false,
-          }), 100)
+        if (!data?.data) return
+
+        const t = { ...data.data.tournament, readOnly: true }
+        const level = typeof t.timerLevel === 'number' ? t.timerLevel : (data.data.level || 0)
+
+        // Calculate correct remaining time RIGHT NOW before any state updates
+        const totalSecs = (t.blinds[level]?.duration || 20) * 60
+        let remaining
+
+        if (t.timerPaused) {
+          // Was paused — show exact remaining time
+          remaining = Math.max(0, totalSecs - (t.timerElapsed || 0))
+        } else if (t.timerStartedAt) {
+          // Was running — calculate elapsed since last start
+          const additionalElapsed = Math.floor((Date.now() - t.timerStartedAt) / 1000)
+          remaining = Math.max(0, totalSecs - (t.timerElapsed || 0) - additionalElapsed)
+        } else {
+          remaining = totalSecs
         }
-      } catch(e) {}
+
+        // Set all state
+        setActiveTournament(t)
+        setCurrentLevel(level)
+        setTimeLeft(remaining)
+        setPaused(t.timerPaused || false)
+        pausedRef.current = t.timerPaused || false
+        setView('live')
+
+        // Start interval only if not paused
+        if (!t.timerPaused && remaining > 0) {
+          if (timerRef.current) clearInterval(timerRef.current)
+          timerRef.current = setInterval(() => {
+            if (pausedRef.current) return
+            setTimeLeft(prev => {
+              if (prev <= 1) {
+                clearInterval(timerRef.current)
+                setCurrentLevel(lvl => {
+                  const next = lvl + 1
+                  if (next < t.blinds.length) {
+                    showToast(t.blinds[next].pause ? '☕ Pause!' : '🔔 Nächstes Level!')
+                    setTimeout(() => startTimerFor(next, t), 100)
+                    return next
+                  }
+                  showToast('🏁 Letztes Level!')
+                  return lvl
+                })
+                return 0
+              }
+              return prev - 1
+            })
+          }, 1000)
+        }
+      } catch(e) {
+        console.warn('checkLive error:', e)
+      }
     }
     checkLive()
 
