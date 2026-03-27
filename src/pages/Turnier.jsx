@@ -1,3 +1,4 @@
+import Avatar from '../components/Avatar'
 import { useState, useEffect, useRef } from 'react'
 import { db } from '../lib/supabase'
 import { formatDate, formatEuro } from '../lib/helpers'
@@ -653,7 +654,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                   {avatars[p.name] ? (
                     <img src={avatars[p.name]} alt={p.name} style={{ width:'22px',height:'22px',borderRadius:'50%',objectFit:'cover',flexShrink:0 }} />
                   ) : (
-                    <div style={{ width:'22px',height:'22px',borderRadius:'50%',background:'rgba(201,168,76,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.7rem',flexShrink:0 }}>👤</div>
+                    <Avatar name={p.name} src={avatars[p.name]} size={22} />
                   )}
                   <span style={{ flex:1, fontSize:'0.72rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</span>
                   {(p.rebuys||0) > 0 && (
@@ -758,7 +759,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                   {avatars[p.name] ? (
                     <img src={avatars[p.name]} alt={p.name} style={{ width:'36px',height:'36px',borderRadius:'50%',objectFit:'cover',border:'2px solid rgba(201,168,76,0.35)' }} />
                   ) : (
-                    <div style={{ width:'36px',height:'36px',borderRadius:'50%',background:'rgba(201,168,76,0.08)',border:'1px dashed rgba(201,168,76,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1rem' }}>👤</div>
+                    <Avatar name={p.name} src={avatars[p.name]} size={36} />
                   )}
                   <div style={{ flex:1 }}>
                     <div style={{ fontWeight:600 }}>{p.name}</div>
@@ -811,7 +812,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                   {avatars[r.name] ? (
                     <img src={avatars[r.name]} alt={r.name} style={{ width:'30px',height:'30px',borderRadius:'50%',objectFit:'cover',border:'1px solid rgba(201,168,76,0.3)' }} />
                   ) : (
-                    <div style={{ width:'30px',height:'30px',borderRadius:'50%',background:'rgba(201,168,76,0.08)',border:'1px dashed rgba(201,168,76,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.9rem' }}>👤</div>
+                    <Avatar name={r.name} src={avatars[r.name]} size={30} />
                   )}
                   <span style={{ flex:1,fontWeight:600,fontSize:'0.95rem' }}>{r.name}</span>
                   {r.payout > 0 && <span className="font-display profit-pos" style={{ fontSize:'0.9rem' }}>+{formatEuro(r.payout)}</span>}

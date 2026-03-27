@@ -150,11 +150,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
               <div style={{ fontSize: i < 3 ? '1.4rem' : '0.9rem', minWidth: '28px', textAlign: 'center', flexShrink: 0 }}>
                 {i < 3 ? MEDALS[i] : `#${i + 1}`}
               </div>
-              {avatars[p.name] ? (
-                <img src={avatars[p.name]} alt={p.name} style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(201,168,76,0.35)', flexShrink: 0 }} />
-              ) : (
-                <div style={{ width: '42px', height: '42px', borderRadius: '50%', background: 'rgba(201,168,76,0.08)', border: '1px dashed rgba(201,168,76,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>👤</div>
-              )}
+              <Avatar name={p.name} src={avatars[p.name]} size={42} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: '1rem' }}>{p.name}</div>
               </div>
@@ -273,11 +269,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
                 {/* Header with avatars and wins */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '12px', alignItems: 'center', textAlign: 'center', marginBottom: '12px' }}>
                   <div>
-                    {avatars[h2hA] ? (
-                      <img src={avatars[h2hA]} alt={h2hA} style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(74,222,128,0.5)', margin: '0 auto 6px', display: 'block' }} />
-                    ) : (
-                      <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(74,222,128,0.08)', border: '1px dashed rgba(74,222,128,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', margin: '0 auto 6px' }}>👤</div>
-                    )}
+                    <Avatar name={h2hA} src={avatars[h2hA]} size={52} style={{ margin: '0 auto 6px', display: 'block' }} />
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>{h2hA}</div>
                     <div className="font-display" style={{ fontSize: '2rem', color: '#4ade80' }}>{h2h.winsA}</div>
                   </div>
@@ -286,11 +278,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
                     <span style={{ fontSize: '0.7rem' }}>{h2h.draws} Unentsch.</span>
                   </div>
                   <div>
-                    {avatars[h2hB] ? (
-                      <img src={avatars[h2hB]} alt={h2hB} style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(96,165,250,0.5)', margin: '0 auto 6px', display: 'block' }} />
-                    ) : (
-                      <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(96,165,250,0.08)', border: '1px dashed rgba(96,165,250,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', margin: '0 auto 6px' }}>👤</div>
-                    )}
+                    <Avatar name={h2hB} src={avatars[h2hB]} size={52} style={{ margin: '0 auto 6px', display: 'block' }} />
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>{h2hB}</div>
                     <div className="font-display" style={{ fontSize: '2rem', color: '#60a5fa' }}>{h2h.winsB}</div>
                   </div>
