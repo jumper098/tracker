@@ -1,12 +1,15 @@
 /**
  * Calculates fair settlement for a poker night.
  * 
- * Rule: Losers always pay their full amount.
- * If total winnings != total losses, winners get adjusted proportionally.
- * (Both too much and too little won → scale winners to match total losses)
+ * If losses > wins (someone undercounted cashout):
+ *   → Difference split equally among all losers
+ *   → Each loser pays equally less
+ * 
+ * If wins > losses (someone overcounted cashout):
+ *   → Difference split equally among all winners
+ *   → Each winner gets equally less
  */
 export function calcSettlement(nightSessions) {
-  // Raw profits per player
   const rawProfits = {}
   nightSessions.forEach(s => {
     rawProfits[s.player_name] = (rawProfits[s.player_name] || 0) + (s.cash_out - s.buy_in)
@@ -19,16 +22,25 @@ export function calcSettlement(nightSessions) {
   let adjustmentNote = null
 
   if (Math.abs(totalWinnings - totalLosses) > 0.01) {
-    // Scale winners up or down to match total losses
-    const factor = totalLosses / totalWinnings
-    Object.keys(adjusted).forEach(name => {
-      if (adjusted[name] > 0) adjusted[name] = Math.round(adjusted[name] * factor * 100) / 100
-    })
+    const diff = totalLosses - totalWinnings // positive = losses > wins
 
-    if (totalWinnings > totalLosses) {
-      adjustmentNote = `Gewinne gekürzt: ${totalWinnings.toFixed(2)}€ → ${totalLosses.toFixed(2)}€ (Verlierer zahlen vollen Betrag)`
+    if (diff > 0) {
+      // Losses > Wins: split difference equally among losers → each pays less
+      const losers = Object.keys(adjusted).filter(n => adjusted[n] < 0)
+      const reduction = diff / losers.length
+      losers.forEach(name => {
+        adjusted[name] = Math.round((adjusted[name] + reduction) * 100) / 100
+      })
+      adjustmentNote = `${diff.toFixed(2)}€ gleichmäßig auf ${losers.length} Verlierer aufgeteilt — jeder zahlt ${reduction.toFixed(2)}€ weniger`
     } else {
-      adjustmentNote = `Gewinne angepasst: ${totalWinnings.toFixed(2)}€ → ${totalLosses.toFixed(2)}€ (fehlende ${(totalLosses - totalWinnings).toFixed(2)}€ auf Gewinner aufgeteilt)`
+      // Wins > Losses: split difference equally among winners → each gets less
+      const absDiff = Math.abs(diff)
+      const winners = Object.keys(adjusted).filter(n => adjusted[n] > 0)
+      const reduction = absDiff / winners.length
+      winners.forEach(name => {
+        adjusted[name] = Math.round((adjusted[name] - reduction) * 100) / 100
+      })
+      adjustmentNote = `${absDiff.toFixed(2)}€ gleichmäßig auf ${winners.length} Gewinner aufgeteilt — jeder bekommt ${reduction.toFixed(2)}€ weniger`
     }
   }
 

@@ -484,10 +484,30 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
                 </div>
               ))
             )}
-            <button className="btn-ghost" style={{ width: '100%', marginTop: '16px' }}
-              onClick={() => setSettlementNight(null)}>
-              Schließen
-            </button>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+              <button className="btn-ghost" style={{ flex: 1 }}
+                onClick={() => setSettlementNight(null)}>
+                Schließen
+              </button>
+              <button className="btn-gold" style={{ flex: 1, fontSize: '0.75rem' }}
+                onClick={() => {
+                  const text = [
+                    `💸 Schuldenausgleich ${formatDate(settlementNight)}`,
+                    '',
+                    ...settlement.map(t => `${t.from} → ${t.to}: ${t.amount.toFixed(2)}€`),
+                    '',
+                    '♠ All In Poker Tracker',
+                  ].join('\n')
+                  if (navigator.share) {
+                    navigator.share({ text })
+                  } else {
+                    navigator.clipboard.writeText(text)
+                    showToast('✓ In Zwischenablage kopiert!')
+                  }
+                }}>
+                📤 Teilen
+              </button>
+            </div>
           </div>
         </div>
       )}
