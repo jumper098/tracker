@@ -81,8 +81,25 @@ export default function App() {
   }
 
   async function renamePlayer(oldName, newName) {
+    // Update sessions in DB
     const { error } = await db.from('poker_sessions').update({ player_name: newName }).eq('player_name', oldName)
     if (error) { showToast('Fehler: ' + error.message); return }
+
+    // Rename avatar in Supabase Storage
+    const { data: files } = await db.storage.from('poker-photos').list('avatars')
+    const match = (files || []).find(f => decodeURIComponent(f.name.replace(/\.[^.]+$/, '')) === oldName)
+    if (match) {
+      const ext = match.name.split('.').pop()
+      const oldPath = `avatars/${match.name}`
+      const newPath = `avatars/${encodeURIComponent(newName)}.${ext}`
+      // Copy to new name
+      const { data: urlData } = db.storage.from('poker-photos').getPublicUrl(oldPath)
+      const response = await fetch(urlData.publicUrl)
+      const blob = await response.blob()
+      await db.storage.from('poker-photos').upload(newPath, blob, { upsert: true, contentType: blob.type })
+      await db.storage.from('poker-photos').remove([oldPath])
+    }
+
     const updated = players.map(p => p === oldName ? newName : p).sort()
     setPlayers(updated)
     localStorage.setItem('poker_players', JSON.stringify(updated))
@@ -230,7 +247,12 @@ function PlayerManager({ players, onAdd, onRemove, onRename, sessions, avatars, 
                       <label style={{ cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
                           <Avatar name={p} src={avatars[p]} size={40} />
                         <input type="file" accept="image/*" style={{ display: 'none' }}
-                          onChange={e => { if (e.target.files[0]) onUploadAvatar(p, e.target.files[0]) }} />
+                          onChange={e => {
+                            if (e.target.files[0]) {
+                              onUploadAvatar(p, e.target.files[0])
+                              e.target.value = '' // Reset so same file can be selected again
+                            }
+                          }} />
                         <div style={{
                           position: 'absolute', bottom: '-2px', right: '-2px',
                           background: 'var(--gold)', borderRadius: '50%',
