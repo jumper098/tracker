@@ -114,6 +114,36 @@ export default function Rangliste({ sessions, avatars = {} }) {
   const h2h = (h2hA && h2hB && h2hA !== h2hB) ? calcH2H(h2hA, h2hB, h2hYear) : null
   const MEDALS = ['🥇', '🥈', '🥉']
 
+  // ─── Quick Stats (always from ALL sessions, not filtered) ─────────────────
+  const quickStats = (() => {
+    if (sessions.length === 0) return null
+    // Biggest single win
+    let biggestWin = { player: null, amount: -Infinity, date: null }
+    sessions.forEach(s => {
+      const p = s.cash_out - s.buy_in
+      if (p > biggestWin.amount) biggestWin = { player: s.player_name, amount: p, date: s.date }
+    })
+    // Highest total profit
+    const profitMap = {}
+    sessions.forEach(s => { profitMap[s.player_name] = (profitMap[s.player_name] || 0) + (s.cash_out - s.buy_in) })
+    const topProfit = Object.entries(profitMap).sort((a,b) => b[1]-a[1])[0]
+    // Longest win streak
+    const byPlayer = {}
+    sessions.forEach(s => { if (!byPlayer[s.player_name]) byPlayer[s.player_name] = []; byPlayer[s.player_name].push(s) })
+    let longestStreak = { player: null, streak: 0 }
+    Object.entries(byPlayer).forEach(([name, ss]) => {
+      const sorted = [...ss].sort((a,b) => a.date.localeCompare(b.date))
+      let cur = 0, max = 0
+      sorted.forEach(s => { const p = s.cash_out - s.buy_in; if (p > 0) { cur++; max = Math.max(max, cur) } else cur = 0 })
+      if (max > longestStreak.streak) longestStreak = { player: name, streak: max }
+    })
+    // Most sessions
+    const sessionMap = {}
+    sessions.forEach(s => { sessionMap[s.player_name] = (sessionMap[s.player_name] || 0) + 1 })
+    const mostSessions = Object.entries(sessionMap).sort((a,b) => b[1]-a[1])[0]
+    return { biggestWin, topProfit, longestStreak, mostSessions }
+  })()
+
   return (
     <div style={{ padding: '20px 16px 100px' }}>
       <div style={{ textAlign: 'center', marginBottom: '20px', paddingTop: '12px' }}>
@@ -121,6 +151,54 @@ export default function Rangliste({ sessions, avatars = {} }) {
           ♠ RANGLISTE
         </div>
       </div>
+
+      {/* Quick Stats */}
+      {quickStats && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+          {[
+            {
+              icon: '💰', label: 'GRÖSSTER GEWINN',
+              value: quickStats.biggestWin.player ? formatEuroSign(quickStats.biggestWin.amount) : '—',
+              sub: quickStats.biggestWin.player,
+              color: '#4ade80',
+            },
+            {
+              icon: '👑', label: 'PROFIT LEADER',
+              value: quickStats.topProfit ? formatEuroSign(quickStats.topProfit[1]) : '—',
+              sub: quickStats.topProfit?.[0],
+              color: 'var(--gold)',
+            },
+            {
+              icon: '🔥', label: 'WIN STREAK',
+              value: quickStats.longestStreak.streak > 0 ? quickStats.longestStreak.streak + '×' : '—',
+              sub: quickStats.longestStreak.player,
+              color: '#fb923c',
+            },
+            {
+              icon: '♠', label: 'MEISTE SESSIONS',
+              value: quickStats.mostSessions ? quickStats.mostSessions[1] : '—',
+              sub: quickStats.mostSessions?.[0],
+              color: '#60a5fa',
+            },
+          ].map(stat => (
+            <div key={stat.label} className="card" style={{ padding: '14px', textAlign: 'center' }}>
+              <div style={{ fontSize: '1.4rem', marginBottom: '4px' }}>{stat.icon}</div>
+              <div style={{ fontFamily: 'Cinzel, serif', fontSize: '1.1rem', color: stat.color, fontWeight: 700, marginBottom: '2px' }}>
+                {stat.value}
+              </div>
+              {stat.sub && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginBottom: '4px' }}>
+                  <Avatar name={stat.sub} avatars={avatars} size={18} />
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: 600 }}>{stat.sub}</span>
+                </div>
+              )}
+              <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.1em' }}>
+                {stat.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Year filter */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
@@ -150,7 +228,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
               <div style={{ fontSize: i < 3 ? '1.4rem' : '0.9rem', minWidth: '28px', textAlign: 'center', flexShrink: 0 }}>
                 {i < 3 ? MEDALS[i] : `#${i + 1}`}
               </div>
-              <Avatar name={p.name} src={avatars[p.name]} size={42} />
+              <Avatar name={p.name} avatars={avatars} size={42} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: '1rem' }}>{p.name}</div>
               </div>
@@ -269,7 +347,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
                 {/* Header with avatars and wins */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '12px', alignItems: 'center', textAlign: 'center', marginBottom: '12px' }}>
                   <div>
-                    <Avatar name={h2hA} src={avatars[h2hA]} size={52} style={{ margin: '0 auto 6px', display: 'block' }} />
+                    <Avatar name={h2hA} avatars={avatars} size={52} style={{ margin: '0 auto 6px', display: 'block' }} />
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>{h2hA}</div>
                     <div className="font-display" style={{ fontSize: '2rem', color: '#4ade80' }}>{h2h.winsA}</div>
                   </div>
@@ -278,7 +356,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
                     <span style={{ fontSize: '0.7rem' }}>{h2h.draws} Unentsch.</span>
                   </div>
                   <div>
-                    <Avatar name={h2hB} src={avatars[h2hB]} size={52} style={{ margin: '0 auto 6px', display: 'block' }} />
+                    <Avatar name={h2hB} avatars={avatars} size={52} style={{ margin: '0 auto 6px', display: 'block' }} />
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>{h2hB}</div>
                     <div className="font-display" style={{ fontSize: '2rem', color: '#60a5fa' }}>{h2h.winsB}</div>
                   </div>
