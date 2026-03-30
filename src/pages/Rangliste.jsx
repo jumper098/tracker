@@ -1,4 +1,4 @@
-import Avatar from '../components/Avatar'
+import Avatar, { safeName } from '../components/Avatar'
 import { useState } from 'react'
 import { formatEuro, formatEuroSign, formatDate, profitClass } from '../lib/helpers'
 
@@ -154,7 +154,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
 
       {/* Quick Stats */}
       {quickStats && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto' }}>
           {[
             {
               icon: '💰', label: 'GRÖSSTER GEWINN',
@@ -181,9 +181,9 @@ export default function Rangliste({ sessions, avatars = {} }) {
               color: '#60a5fa',
             },
           ].map(stat => (
-            <div key={stat.label} className="card" style={{ padding: '14px', textAlign: 'center' }}>
+            <div key={stat.label} className="card" style={{ padding: '12px 8px', textAlign: 'center', minWidth: '80px', flex: 1 }}>
               <div style={{ fontSize: '1.4rem', marginBottom: '4px' }}>{stat.icon}</div>
-              <div style={{ fontFamily: 'Cinzel, serif', fontSize: '1.1rem', color: stat.color, fontWeight: 700, marginBottom: '2px' }}>
+              <div style={{ fontFamily: 'Cinzel, serif', fontSize: '0.9rem', color: stat.color, fontWeight: 700, marginBottom: '2px' }}>
                 {stat.value}
               </div>
               {stat.sub && (
@@ -298,6 +298,39 @@ export default function Rangliste({ sessions, avatars = {} }) {
                   </div>
                 )}
 
+                {/* Session history */}
+                {(() => {
+                  const playerSessions = filtered
+                    .filter(s => s.player_name === p.name)
+                    .sort((a, b) => b.date.localeCompare(a.date))
+                  if (playerSessions.length === 0) return null
+                  return (
+                    <div style={{ marginTop: '14px' }}>
+                      <div style={{ fontFamily: 'Cinzel, serif', fontSize: '0.65rem', color: 'var(--text-muted)', letterSpacing: '0.1em', marginBottom: '8px' }}>
+                        SESSIONS ({playerSessions.length})
+                      </div>
+                      {playerSessions.map(s => {
+                        const profit = s.cash_out - s.buy_in
+                        return (
+                          <div key={s.id} style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                            fontSize: '0.82rem',
+                          }}>
+                            <span style={{ color: 'var(--text-muted)' }}>{formatDate(s.date)}</span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                              {formatEuro(s.buy_in)} → {formatEuro(s.cash_out)}
+                              {s.rebuy_count > 0 && ` · ${s.rebuy_count}× R`}
+                            </span>
+                            <span className={`font-display ${profitClass(profit)}`} style={{ fontSize: '0.82rem' }}>
+                              {formatEuroSign(profit)}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
 
               </div>
             )}
