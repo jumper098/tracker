@@ -1,3 +1,5 @@
+import { safeName } from '../lib/safeName'
+export { safeName }
 const COLORS = [
   '#C9A84C', '#4ade80', '#60a5fa', '#f472b6',
   '#a78bfa', '#fb923c', '#34d399', '#f87171',
@@ -19,13 +21,17 @@ function getInitials(name) {
   return name.slice(0, 2).toUpperCase()
 }
 
-export default function Avatar({ name, src, size = 36, style = {} }) {
+// avatars object uses safeName as key — this component handles the lookup
+export default function Avatar({ name, src, avatars, size = 36, style = {} }) {
   const color = nameToColor(name)
   const initials = getInitials(name)
 
-  if (src) {
+  // Support both direct src and avatars object lookup
+  const imgSrc = src || (avatars ? avatars[safeName(name)] : null)
+
+  if (imgSrc) {
     return (
-      <img src={src} alt={name} style={{
+      <img src={imgSrc} alt={name} style={{
         width: size, height: size, borderRadius: '50%',
         objectFit: 'cover',
         border: `2px solid ${color}66`,
