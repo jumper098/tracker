@@ -1,4 +1,4 @@
-import Avatar from './components/Avatar'
+import Avatar, { safeName } from './components/Avatar'
 import { useState, useEffect } from 'react'
 import { db } from './lib/supabase'
 import { useAvatars } from './hooks/useAvatars'
@@ -245,7 +245,7 @@ function PlayerManager({ players, onAdd, onRemove, onRename, sessions, avatars, 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       {/* Avatar */}
                       <label style={{ cursor: 'pointer', flexShrink: 0, position: 'relative' }}>
-                          <Avatar name={p} src={avatars[p]} size={40} />
+                          <Avatar name={p} avatars={avatars} size={40} />
                         <input type="file" accept="image/*" style={{ display: 'none' }}
                           onChange={e => {
                             if (e.target.files[0]) {
@@ -271,7 +271,7 @@ function PlayerManager({ players, onAdd, onRemove, onRename, sessions, avatars, 
                       </div>
 
                       <div style={{ display: 'flex', gap: '6px' }}>
-                        {avatars[p] && (
+                        {avatars[safeName(p)] && (
                           <button className="btn-danger" style={{ fontSize: '0.65rem', padding: '4px 8px' }}
                             onClick={() => onDeleteAvatar(p)}>🗑</button>
                         )}

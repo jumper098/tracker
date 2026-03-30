@@ -4,7 +4,7 @@ import { formatDate, formatEuro, formatEuroSign, profitClass } from '../lib/help
 import { calcSettlement } from '../lib/settlement'
 import { showToast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
-import Avatar from '../components/Avatar'
+import Avatar, { safeName } from '../components/Avatar'
 
 export default function Sessions({ sessions, onRefresh, avatars = {} }) {
   const [openNights, setOpenNights] = useState({})
@@ -374,7 +374,7 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
                           {avatars[s.player_name] ? (
-                            <img src={avatars[s.player_name]} alt={s.player_name} style={{
+                            <img src={avatars[safeName(s.player_name)]} alt={s.player_name} style={{
                               width: '28px', height: '28px', borderRadius: '50%',
                               objectFit: 'cover', border: '1px solid rgba(201,168,76,0.3)', flexShrink: 0,
                             }} />
