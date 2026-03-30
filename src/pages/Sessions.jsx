@@ -4,7 +4,8 @@ import { formatDate, formatEuro, formatEuroSign, profitClass } from '../lib/help
 import { calcSettlement } from '../lib/settlement'
 import { showToast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
-import Avatar, { safeName } from '../components/Avatar'
+import Avatar from '../components/Avatar'
+import { safeName } from '../lib/safeName'
 
 export default function Sessions({ sessions, onRefresh, avatars = {} }) {
   const [openNights, setOpenNights] = useState({})
@@ -153,22 +154,11 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
 
   return (
     <div style={{ padding: '20px 16px 100px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px', paddingTop: '12px', position: 'relative' }}>
+      <div style={{ textAlign: 'center', marginBottom: '20px', paddingTop: '12px' }}>
         <div className="font-display" style={{ fontSize: '1.3rem', color: 'var(--gold)', letterSpacing: '0.15em' }}>
           ♠ SESSIONS
         </div>
-        {Object.keys(photos).length > 0 && (
-          <button onClick={() => { setShowGallery(true); setGalleryIndex(0) }}
-            style={{
-              position: 'absolute', right: 0,
-              background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)',
-              borderRadius: '20px', padding: '5px 12px', cursor: 'pointer',
-              fontFamily: 'Cinzel, serif', fontSize: '0.62rem', color: 'var(--gold)',
-              letterSpacing: '0.08em',
-            }}>
-            📷 Galerie
-          </button>
-        )}
+
       </div>
 
       {/* Top 3 Last Night — always from most recent session overall */}
@@ -255,10 +245,16 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
       })()}
 
       {/* Quick stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '16px' }}>
         <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
           <div className="font-display" style={{ fontSize: '1.4rem', color: 'var(--gold)' }}>{totalNights}</div>
           <div className="section-label" style={{ marginBottom: 0 }}>Spielabende</div>
+        </div>
+        <div className="card" onClick={() => { if(Object.keys(photos).length > 0){ setShowGallery(true); setGalleryIndex(0) } }}
+          style={{ padding: '14px', textAlign: 'center', cursor: Object.keys(photos).length > 0 ? 'pointer' : 'default',
+            opacity: Object.keys(photos).length > 0 ? 1 : 0.4 }}>
+          <div className="font-display" style={{ fontSize: '1.4rem', color: 'var(--gold)' }}>📷</div>
+          <div className="section-label" style={{ marginBottom: 0 }}>Galerie</div>
         </div>
         <div className="card" style={{ padding: '14px', textAlign: 'center' }}>
           <div className="font-display" style={{ fontSize: '1.1rem', color: 'var(--gold)' }}>{formatEuro(totalPot)}</div>
