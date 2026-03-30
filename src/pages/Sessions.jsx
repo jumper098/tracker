@@ -18,6 +18,12 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
   const [lightbox, setLightbox] = useState(null)
   const [editSession, setEditSession] = useState(null)
   const [editValues, setEditValues] = useState({})
+  const [showGallery, setShowGallery] = useState(false)
+  const [galleryIndex, setGalleryIndex] = useState(0)
+  const [notes, setNotes] = useState({}) // date -> note text
+  const [editingNote, setEditingNote] = useState(null) // date
+  const [noteText, setNoteText] = useState('')
+  const touchStartX = useRef(0)
 
   // Group sessions by date
   const byDate = {}
@@ -147,10 +153,22 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
 
   return (
     <div style={{ padding: '20px 16px 100px' }}>
-      <div style={{ textAlign: 'center', marginBottom: '20px', paddingTop: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px', paddingTop: '12px', position: 'relative' }}>
         <div className="font-display" style={{ fontSize: '1.3rem', color: 'var(--gold)', letterSpacing: '0.15em' }}>
           ♠ SESSIONS
         </div>
+        {Object.keys(photos).length > 0 && (
+          <button onClick={() => { setShowGallery(true); setGalleryIndex(0) }}
+            style={{
+              position: 'absolute', right: 0,
+              background: 'rgba(201,168,76,0.1)', border: '1px solid rgba(201,168,76,0.3)',
+              borderRadius: '20px', padding: '5px 12px', cursor: 'pointer',
+              fontFamily: 'Cinzel, serif', fontSize: '0.62rem', color: 'var(--gold)',
+              letterSpacing: '0.08em',
+            }}>
+            📷 Galerie
+          </button>
+        )}
       </div>
 
       {/* Top 3 Last Night — always from most recent session overall */}
@@ -543,6 +561,117 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
           </div>
         </div>
       )}
+
+      {/* Gallery Modal */}
+      {showGallery && (() => {
+        const photoDates = Object.keys(photos)
+          .filter(d => photos[d])
+          .sort((a,b) => b.localeCompare(a))
+        if (photoDates.length === 0) return null
+        const idx = Math.max(0, Math.min(galleryIndex, photoDates.length - 1))
+        const date = photoDates[idx]
+        const night = byDate[date] || []
+        const pot = night.reduce((s,e) => s + e.buy_in, 0)
+        const note = notes[date] || ''
+
+        return (
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.95)', zIndex:600, display:'flex', flexDirection:'column' }}
+            onTouchStart={e => { touchStartX.current = e.touches[0].clientX }}
+            onTouchEnd={e => {
+              const diff = touchStartX.current - e.changedTouches[0].clientX
+              if (Math.abs(diff) > 50) {
+                if (diff > 0) setGalleryIndex(i => Math.min(i+1, photoDates.length-1))
+                else setGalleryIndex(i => Math.max(i-1, 0))
+              }
+            }}>
+
+            {/* Header */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 20px', flexShrink:0 }}>
+              <div>
+                <div className="font-display" style={{ fontSize:'0.8rem', color:'var(--gold)', letterSpacing:'0.1em' }}>
+                  📷 GALERIE
+                </div>
+                <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'2px' }}>
+                  {formatDate(date)} · {idx+1}/{photoDates.length}
+                </div>
+              </div>
+              <button onClick={() => setShowGallery(false)}
+                style={{ background:'none', border:'none', color:'var(--text-muted)', fontSize:'1.5rem', cursor:'pointer' }}>✕</button>
+            </div>
+
+            {/* Photo */}
+            <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', padding:'0 20px', position:'relative' }}>
+              <img src={photos[date]} alt={date} style={{ maxWidth:'100%', maxHeight:'100%', borderRadius:'12px', objectFit:'contain' }} />
+              {/* Nav arrows */}
+              {idx > 0 && (
+                <button onClick={() => setGalleryIndex(i => i-1)}
+                  style={{ position:'absolute', left:0, top:'50%', transform:'translateY(-50%)', background:'rgba(0,0,0,0.5)', border:'none', color:'white', fontSize:'1.5rem', padding:'12px 16px', cursor:'pointer', borderRadius:'0 8px 8px 0' }}>‹</button>
+              )}
+              {idx < photoDates.length-1 && (
+                <button onClick={() => setGalleryIndex(i => i+1)}
+                  style={{ position:'absolute', right:0, top:'50%', transform:'translateY(-50%)', background:'rgba(0,0,0,0.5)', border:'none', color:'white', fontSize:'1.5rem', padding:'12px 16px', cursor:'pointer', borderRadius:'8px 0 0 8px' }}>›</button>
+              )}
+            </div>
+
+            {/* Info & Note */}
+            <div style={{ padding:'16px 20px', flexShrink:0 }}>
+              {/* Avatars + pot */}
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'10px' }}>
+                <div style={{ display:'flex' }}>
+                  {night.slice(0,5).map((s,i) => (
+                    <div key={s.id} style={{ marginLeft: i===0?0:'-8px', zIndex:10-i }}>
+                      <Avatar name={s.player_name} avatars={avatars} size={26} style={{ border:'2px solid rgba(0,0,0,0.8)' }} />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize:'0.78rem', color:'var(--text-muted)' }}>
+                  {night.length} Spieler · Pot {formatEuro(pot)}
+                </div>
+              </div>
+
+              {/* Note */}
+              {editingNote === date ? (
+                <div style={{ display:'flex', gap:'8px' }}>
+                  <input className="input-field" value={noteText} onChange={e => setNoteText(e.target.value)}
+                    placeholder="Notiz hinzufügen..." autoFocus
+                    onKeyDown={e => { if(e.key==='Enter') saveNote(date, noteText) }}
+                    style={{ flex:1 }} />
+                  <button className="btn-gold" style={{ padding:'8px 14px', fontSize:'0.75rem' }}
+                    onClick={() => saveNote(date, noteText)}>✓</button>
+                  <button className="btn-ghost" style={{ padding:'8px 10px' }}
+                    onClick={() => setEditingNote(null)}>✕</button>
+                </div>
+              ) : (
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  {note ? (
+                    <>
+                      <div style={{ flex:1, fontSize:'0.85rem', color:'var(--text-primary)', fontStyle:'italic' }}>"{note}"</div>
+                      <button onClick={() => { setEditingNote(date); setNoteText(note) }}
+                        style={{ background:'none', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'0.9rem' }}>✏️</button>
+                      <button onClick={() => deleteNote(date)}
+                        style={{ background:'none', border:'none', color:'rgba(248,113,113,0.6)', cursor:'pointer', fontSize:'0.9rem' }}>🗑</button>
+                    </>
+                  ) : (
+                    <button onClick={() => { setEditingNote(date); setNoteText('') }}
+                      style={{ background:'none', border:'1px dashed rgba(201,168,76,0.3)', borderRadius:'8px', padding:'6px 14px', color:'var(--text-muted)', cursor:'pointer', fontSize:'0.78rem', fontFamily:'Cinzel,serif', letterSpacing:'0.06em' }}>
+                      + Notiz hinzufügen
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Dot navigation */}
+              <div style={{ display:'flex', justifyContent:'center', gap:'6px', marginTop:'14px' }}>
+                {photoDates.map((_,i) => (
+                  <div key={i} onClick={() => setGalleryIndex(i)}
+                    style={{ width: i===idx ? '20px' : '6px', height:'6px', borderRadius:'3px', cursor:'pointer', transition:'all 0.2s',
+                      background: i===idx ? 'var(--gold)' : 'rgba(255,255,255,0.2)' }} />
+                ))}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {confirm && (
         <ConfirmDialog title={confirm.title} text={confirm.text} okLabel="Löschen"
