@@ -153,17 +153,40 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
         </div>
       </div>
 
-      {/* Top 3 Last Night */}
+      {/* Top 3 Last Night — always from most recent session overall */}
       {(() => {
-        const lastNightDate = filteredDates[0]
+        // Always use the globally most recent night regardless of year filter
+        const allDates = Object.keys(byDate).sort((a,b) => b.localeCompare(a))
+        const lastNightDate = allDates[0]
         if (!lastNightDate) return null
         const lastNight = byDate[lastNightDate]
         const top3 = [...lastNight]
           .sort((a, b) => (b.cash_out - b.buy_in) - (a.cash_out - a.buy_in))
           .slice(0, 3)
+
+        // Podium order: 2nd (left), 1st (center/tallest), 3rd (right)
+        const podiumOrder = [top3[1], top3[0], top3[2]].filter(Boolean)
+        const podiumHeights = [70, 90, 55] // px — 2nd, 1st, 3rd
+        const podiumColors = [
+          'rgba(160,160,180,0.12)', // silver - 2nd
+          'rgba(201,168,76,0.12)',  // gold - 1st
+          'rgba(180,120,60,0.08)',  // bronze - 3rd
+        ]
+        const podiumBorders = [
+          'rgba(160,160,180,0.25)',
+          'rgba(201,168,76,0.35)',
+          'rgba(180,120,60,0.2)',
+        ]
+        const medals = ['🥈', '🥇', '🥉']
+        const profitColors = [
+          top3[1] ? profitClass(top3[1].cash_out - top3[1].buy_in) : '',
+          top3[0] ? profitClass(top3[0].cash_out - top3[0].buy_in) : '',
+          top3[2] ? profitClass(top3[2].cash_out - top3[2].buy_in) : '',
+        ]
+
         return (
           <div className="card" style={{ marginBottom: '16px', padding: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div className="font-display" style={{ fontSize: '0.72rem', color: 'var(--gold)', letterSpacing: '0.12em' }}>
                 🃏 LETZTER ABEND
               </div>
@@ -171,35 +194,44 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
                 {formatDate(lastNightDate)}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {top3.map((s, i) => {
+
+            {/* Podium */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', height: '160px' }}>
+              {podiumOrder.map((s, idx) => {
+                if (!s) return <div key={idx} style={{ flex: 1 }} />
                 const profit = s.cash_out - s.buy_in
-                const medals = ['🥇', '🥈', '🥉']
                 return (
-                  <div key={s.id} style={{
-                    flex: 1, textAlign: 'center', padding: '12px 6px',
-                    borderRadius: '10px',
-                    background: i === 0 ? 'rgba(201,168,76,0.08)' : 'rgba(255,255,255,0.02)',
-                    border: `1px solid ${i === 0 ? 'rgba(201,168,76,0.25)' : 'rgba(255,255,255,0.05)'}`,
-                  }}>
-                    <div style={{ marginBottom: '6px' }}>
-                      <Avatar name={s.player_name} src={avatars[s.player_name]} size={38} style={{ margin: '0 auto' }} />
+                  <div key={s.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    {/* Player info above podium */}
+                    <div style={{ textAlign: 'center', marginBottom: '6px' }}>
+                      <Avatar name={s.player_name} avatars={avatars} size={idx === 1 ? 44 : 36}
+                        style={{ margin: '0 auto 4px' }} />
+                      <div style={{ fontSize: '0.62rem', fontWeight: 600,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        color: idx === 1 ? 'var(--gold)' : 'var(--text-primary)',
+                        maxWidth: '70px',
+                      }}>{s.player_name}</div>
+                      <div className={`font-display ${profitColors[idx]}`} style={{ fontSize: '0.72rem' }}>
+                        {profit >= 0 ? '+' : ''}{profit.toFixed(0)}€
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.65rem', fontWeight: 600, marginBottom: '3px',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      color: i === 0 ? 'var(--gold)' : 'var(--text-primary)' }}>
-                      {s.player_name}
-                    </div>
-                    <div style={{ fontSize: '0.75rem' }}>
-                      {medals[i]}
-                    </div>
-                    <div className={`font-display ${profitClass(profit)}`} style={{ fontSize: '0.78rem', marginTop: '2px' }}>
-                      {profit >= 0 ? '+' : ''}{profit.toFixed(0)}€
+                    {/* Podium block */}
+                    <div style={{
+                      width: '100%', height: podiumHeights[idx] + 'px',
+                      borderRadius: '8px 8px 0 0',
+                      background: podiumColors[idx],
+                      border: `1px solid ${podiumBorders[idx]}`,
+                      borderBottom: 'none',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <span style={{ fontSize: idx === 1 ? '1.6rem' : '1.2rem' }}>{medals[idx]}</span>
                     </div>
                   </div>
                 )
               })}
             </div>
+            {/* Podium base line */}
+            <div style={{ height: '3px', background: 'rgba(201,168,76,0.2)', borderRadius: '2px', marginTop: '-1px' }} />
           </div>
         )
       })()}
@@ -258,7 +290,7 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
                 <div style={{ display: 'flex', marginTop: '6px', gap: '0' }}>
                   {night.slice(0,6).map((s, i) => (
                     <div key={s.id} style={{ marginLeft: i === 0 ? 0 : '-8px', zIndex: night.length - i }}>
-                      <Avatar name={s.player_name} src={avatars[s.player_name]} size={24}
+                      <Avatar name={s.player_name} avatars={avatars} size={24}
                         style={{ border: '1.5px solid rgba(20,20,22,0.9)' }} />
                     </div>
                   ))}
