@@ -4,7 +4,7 @@ const TABS = [
   { id: 'eintrag',   icon: '✚', label: 'Eintrag'   },
   { id: 'sessions',  icon: '♠', label: 'Sessions'  },
   { id: 'rangliste', icon: '🏆', label: 'Rangliste' },
-  { id: 'grafik',    icon: '📈', label: 'Grafik'    },
+  { id: 'grafik',    icon: '📈', label: 'Statistik' },
   { id: 'awards',    icon: '🎖', label: 'Awards'    },
   { id: 'turnier',   icon: '🎰', label: 'Turnier'   },
 ]
