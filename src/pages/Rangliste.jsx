@@ -1,4 +1,5 @@
-import Avatar, { safeName } from '../components/Avatar'
+import Avatar from '../components/Avatar'
+import { safeName } from '../lib/safeName'
 import { useState } from 'react'
 import { formatEuro, formatEuroSign, formatDate, profitClass } from '../lib/helpers'
 
@@ -114,34 +115,62 @@ export default function Rangliste({ sessions, avatars = {} }) {
   const h2h = (h2hA && h2hB && h2hA !== h2hB) ? calcH2H(h2hA, h2hB, h2hYear) : null
   const MEDALS = ['🥇', '🥈', '🥉']
 
-  // ─── Quick Stats (always from ALL sessions, not filtered) ─────────────────
+  // ─── Live Quick Stats ────────────────────────────────────────────────────
   const quickStats = (() => {
     if (sessions.length === 0) return null
-    // Biggest single win
-    let biggestWin = { player: null, amount: -Infinity, date: null }
-    sessions.forEach(s => {
-      const p = s.cash_out - s.buy_in
-      if (p > biggestWin.amount) biggestWin = { player: s.player_name, amount: p, date: s.date }
-    })
-    // Highest total profit
-    const profitMap = {}
-    sessions.forEach(s => { profitMap[s.player_name] = (profitMap[s.player_name] || 0) + (s.cash_out - s.buy_in) })
-    const topProfit = Object.entries(profitMap).sort((a,b) => b[1]-a[1])[0]
-    // Longest win streak
+
+    const allPlayers = [...new Set(sessions.map(s => s.player_name))]
+    const allNights = [...new Set(sessions.map(s => s.date))].sort()
     const byPlayer = {}
     sessions.forEach(s => { if (!byPlayer[s.player_name]) byPlayer[s.player_name] = []; byPlayer[s.player_name].push(s) })
-    let longestStreak = { player: null, streak: 0 }
-    Object.entries(byPlayer).forEach(([name, ss]) => {
-      const sorted = [...ss].sort((a,b) => a.date.localeCompare(b.date))
-      let cur = 0, max = 0
-      sorted.forEach(s => { const p = s.cash_out - s.buy_in; if (p > 0) { cur++; max = Math.max(max, cur) } else cur = 0 })
-      if (max > longestStreak.streak) longestStreak = { player: name, streak: max }
+
+    // 1. Current Win Streak — how many consecutive wins right now
+    let winStreak = { players: [], streak: 0 }
+    allPlayers.forEach(name => {
+      const sorted = [...(byPlayer[name]||[])].sort((a,b) => b.date.localeCompare(a.date)) // newest first
+      let cur = 0
+      for (const s of sorted) {
+        if (s.cash_out - s.buy_in > 0) cur++
+        else break
+      }
+      if (cur > winStreak.streak) { winStreak = { players: [name], streak: cur } }
+      else if (cur === winStreak.streak && cur > 0) { winStreak.players.push(name) }
     })
-    // Most sessions
-    const sessionMap = {}
-    sessions.forEach(s => { sessionMap[s.player_name] = (sessionMap[s.player_name] || 0) + 1 })
-    const mostSessions = Object.entries(sessionMap).sort((a,b) => b[1]-a[1])[0]
-    return { biggestWin, topProfit, longestStreak, mostSessions }
+
+    // 2. Current Loss Streak — how many consecutive losses right now
+    let lossStreak = { players: [], streak: 0 }
+    allPlayers.forEach(name => {
+      const sorted = [...(byPlayer[name]||[])].sort((a,b) => b.date.localeCompare(a.date))
+      let cur = 0
+      for (const s of sorted) {
+        if (s.cash_out - s.buy_in < 0) cur++
+        else break
+      }
+      if (cur > lossStreak.streak) { lossStreak = { players: [name], streak: cur } }
+      else if (cur === lossStreak.streak && cur > 0) { lossStreak.players.push(name) }
+    })
+
+    // 3. Biggest single win ever
+    let biggestWin = { player: null, amount: -Infinity }
+    sessions.forEach(s => {
+      const p = s.cash_out - s.buy_in
+      if (p > biggestWin.amount) biggestWin = { player: s.player_name, amount: p }
+    })
+
+    // 4. Current attendance streak — most consecutive nights attended right now
+    let attendStreak = { players: [], streak: 0 }
+    allPlayers.forEach(name => {
+      const playerNights = new Set((byPlayer[name]||[]).map(s => s.date))
+      let cur = 0
+      for (let i = allNights.length - 1; i >= 0; i--) {
+        if (playerNights.has(allNights[i])) cur++
+        else break
+      }
+      if (cur > attendStreak.streak) { attendStreak = { players: [name], streak: cur } }
+      else if (cur === attendStreak.streak && cur > 0) { attendStreak.players.push(name) }
+    })
+
+    return { winStreak, lossStreak, biggestWin, attendStreak }
   })()
 
   return (
@@ -152,51 +181,56 @@ export default function Rangliste({ sessions, avatars = {} }) {
         </div>
       </div>
 
-      {/* Quick Stats */}
+      {/* Live Quick Stats */}
       {quickStats && (
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto' }}>
-          {[
-            {
-              icon: '💰', label: 'GRÖSSTER GEWINN',
-              value: quickStats.biggestWin.player ? formatEuroSign(quickStats.biggestWin.amount) : '—',
-              sub: quickStats.biggestWin.player,
-              color: '#4ade80',
-            },
-            {
-              icon: '👑', label: 'PROFIT LEADER',
-              value: quickStats.topProfit ? formatEuroSign(quickStats.topProfit[1]) : '—',
-              sub: quickStats.topProfit?.[0],
-              color: 'var(--gold)',
-            },
-            {
-              icon: '🔥', label: 'WIN STREAK',
-              value: quickStats.longestStreak.streak > 0 ? quickStats.longestStreak.streak + '×' : '—',
-              sub: quickStats.longestStreak.player,
-              color: '#fb923c',
-            },
-            {
-              icon: '♠', label: 'MEISTE SESSIONS',
-              value: quickStats.mostSessions ? quickStats.mostSessions[1] : '—',
-              sub: quickStats.mostSessions?.[0],
-              color: '#60a5fa',
-            },
-          ].map(stat => (
-            <div key={stat.label} className="card" style={{ padding: '12px 8px', textAlign: 'center', minWidth: '80px', flex: 1 }}>
-              <div style={{ fontSize: '1.4rem', marginBottom: '4px' }}>{stat.icon}</div>
-              <div style={{ fontFamily: 'Cinzel, serif', fontSize: '0.9rem', color: stat.color, fontWeight: 700, marginBottom: '2px' }}>
-                {stat.value}
-              </div>
-              {stat.sub && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', marginBottom: '4px' }}>
-                  <Avatar name={stat.sub} avatars={avatars} size={18} />
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-primary)', fontWeight: 600 }}>{stat.sub}</span>
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+            <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#f87171', animation: 'pulse 1.5s infinite' }} />
+            <span style={{ fontFamily: 'Cinzel, serif', fontSize: '0.6rem', color: '#f87171', letterSpacing: '0.15em' }}>LIVE</span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {[
+              {
+                icon: '🔥', label: 'WIN STREAK',
+                value: quickStats.winStreak.streak > 0 ? quickStats.winStreak.streak + '×' : '—',
+                players: quickStats.winStreak.players,
+                color: '#fb923c',
+              },
+              {
+                icon: '❄️', label: 'LOSS STREAK',
+                value: quickStats.lossStreak.streak > 0 ? quickStats.lossStreak.streak + '×' : '—',
+                players: quickStats.lossStreak.players,
+                color: '#60a5fa',
+              },
+              {
+                icon: '💰', label: 'BEST WIN',
+                value: quickStats.biggestWin.player ? formatEuroSign(quickStats.biggestWin.amount) : '—',
+                players: quickStats.biggestWin.player ? [quickStats.biggestWin.player] : [],
+                color: '#4ade80',
+              },
+              {
+                icon: '📅', label: 'DABEI STREAK',
+                value: quickStats.attendStreak.streak > 0 ? quickStats.attendStreak.streak + '×' : '—',
+                players: quickStats.attendStreak.players,
+                color: '#a78bfa',
+              },
+            ].map(stat => (
+              <div key={stat.label} className="card" style={{ padding: '10px 6px', textAlign: 'center', flex: 1 }}>
+                <div style={{ fontSize: '1.2rem', marginBottom: '3px' }}>{stat.icon}</div>
+                <div style={{ fontFamily: 'Cinzel, serif', fontSize: '0.85rem', color: stat.color, fontWeight: 700, marginBottom: '4px' }}>
+                  {stat.value}
                 </div>
-              )}
-              <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.1em' }}>
-                {stat.label}
+                <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '2px', marginBottom: '4px' }}>
+                  {stat.players.slice(0,3).map(p => (
+                    <Avatar key={p} name={p} avatars={avatars} size={20} />
+                  ))}
+                </div>
+                <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em' }}>
+                  {stat.label}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
