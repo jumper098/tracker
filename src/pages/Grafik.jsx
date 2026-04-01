@@ -210,7 +210,7 @@ export default function Grafik({ sessions }) {
     <div style={{ padding: '20px 16px 100px' }}>
       <div style={{ textAlign: 'center', marginBottom: '20px', paddingTop: '12px' }}>
         <div className="font-display" style={{ fontSize: '1.3rem', color: 'var(--gold)', letterSpacing: '0.15em' }}>
-          ♠ GRAFIK
+          ♠ STATISTIK
         </div>
       </div>
 
