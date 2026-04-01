@@ -216,16 +216,25 @@ export default function Rangliste({ sessions, avatars = {} }) {
               },
             ].map(stat => (
               <div key={stat.label} className="card" style={{ padding: '10px 6px', textAlign: 'center', flex: 1 }}>
-                <div style={{ fontSize: '1.2rem', marginBottom: '3px' }}>{stat.icon}</div>
-                <div style={{ fontFamily: 'Cinzel, serif', fontSize: '0.85rem', color: stat.color, fontWeight: 700, marginBottom: '4px' }}>
+                <div style={{ fontSize: '0.8rem', marginBottom: '3px' }}>{stat.icon}</div>
+                <div style={{ fontFamily: 'Cinzel, serif', fontSize: '1rem', color: stat.color, fontWeight: 700, marginBottom: '4px' }}>
                   {stat.value}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '2px', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '2px', marginBottom: '5px' }}>
                   {stat.players.slice(0,3).map(p => (
                     <Avatar key={p} name={p} avatars={avatars} size={20} />
                   ))}
                 </div>
-                <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em' }}>
+                {stat.players.slice(0,2).map(p => (
+                  <div key={p} style={{ fontSize: '0.6rem', color: 'var(--text-primary)', fontWeight: 600,
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                    {p}
+                  </div>
+                ))}
+                {stat.players.length > 2 && (
+                  <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>+{stat.players.length - 2} weitere</div>
+                )}
+                <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.06em', marginTop: '4px' }}>
                   {stat.label}
                 </div>
               </div>
