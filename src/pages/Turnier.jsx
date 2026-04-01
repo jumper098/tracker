@@ -101,7 +101,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   }
 
   // ─── Apply tournament state ────────────────────────────────────────────────
-  function applyState(t) {
+  function applyState(t, fromRemote = false) {
     if (!t) return
     const lvl = typeof t.timerLevel === 'number' ? t.timerLevel : 0
     const rem = calcRemaining(t, lvl)
@@ -111,14 +111,13 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     setPaused(t.timerPaused || false)
     pausedRef.current = t.timerPaused || false
     setView('live')
+    // Always restart tick from DB state — calcRemaining handles the offset correctly
     startTick(t, lvl)
   }
 
   // ─── Sync to DB ────────────────────────────────────────────────────────────
-  const lastSync = useRef(0)
-  function syncDb(t) {
-    if (Date.now() - lastSync.current < 800) return
-    lastSync.current = Date.now()
+  const isApplyingRemote = useRef(false)
+  function syncDb(t, immediate = false) {
     db.from('live_tournament').upsert(
       { id: 'current', data: { tournament: t }, updated_at: new Date().toISOString() },
       { onConflict: 'id' }
@@ -139,7 +138,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       .on('postgres_changes', { event: '*', schema: 'public', table: 'live_tournament' }, p => {
         const t = p.new?.data?.tournament
         if (t) {
-          applyState(t)
+          applyState(t, true)
         } else {
           if (timerRef.current) clearInterval(timerRef.current)
           setTournament(null)
@@ -408,7 +407,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
             {/* Blind rows */}
             <div style={{ display:'flex', flexDirection:'column', gap:'4px', marginBottom:'8px' }}>
               {blinds.map((b, i) => (
-                <div key={i} style={{ display:'grid', gridTemplateColumns:'24px 1fr 1fr 56px 32px', gap:'4px', alignItems:'center',
+                <div key={i} style={{ display:'grid', gridTemplateColumns:'24px 1fr 1fr 56px 36px', gap:'4px', alignItems:'center',
                   background: b.pause ? 'rgba(96,165,250,0.05)' : 'transparent', borderRadius:'6px', padding:'2px 0' }}>
                   <div style={{ textAlign:'center', fontSize:'0.65rem', color: b.pause ? '#60a5fa' : 'var(--text-muted)' }}>
                     {b.pause ? '☕' : i+1}
@@ -631,7 +630,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
               {tournament.players.filter(p=>!p.eliminated).map(p => (
                 <div key={p.name} style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 8px', borderRadius:'10px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
-                  <Avatar name={p.name} src={avatars[p.name]} size={22} />
+                  <Avatar name={p.name} avatars={avatars} size={22} />
                   <span style={{ flex:1, fontSize:'0.72rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</span>
                   {(p.rebuys||0)>0 && (
                     <>
@@ -726,7 +725,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
               <div key={p.name} className="card" style={{ marginBottom:'10px',padding:'14px 16px' }}>
                 <div style={{ display:'flex',alignItems:'center',gap:'12px' }}>
                   <div style={{ fontSize:i<3?'1.3rem':'0.9rem',minWidth:'28px' }}>{i<3?['🥇','🥈','🥉'][i]:`#${i+1}`}</div>
-                  <Avatar name={p.name} src={avatars[p.name]} size={36} />
+                  <Avatar name={p.name} avatars={avatars} size={36} />
                   <div style={{ flex:1 }}>
                     <div style={{ fontWeight:600 }}>{p.name}</div>
                     <div style={{ fontSize:'0.75rem',color:'var(--text-muted)' }}>{p.tournaments} Turniere · {p.wins} Siege · {p.itm}× ITM</div>
@@ -754,7 +753,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
             <div style={{ display:'flex',gap:'10px' }}>
               <button className="btn-ghost" style={{ flex:1 }} onClick={()=>setRebuyConfirm(null)}>Abbrechen</button>
               <button className="btn-ghost" style={{ flex:1,borderColor:'rgba(244,114,182,0.5)',color:'#f472b6' }}
-                onClick={()=>{ addRebuy(rebuyConfirm); setRebuyConfirm(null) }}>✓ Bestätigen</button>
+                onClick={() => { addRebuy(rebuyConfirm); setRebuyConfirm(null); setView('live') }}>✓ Bestätigen</button>
             </div>
           </div>
         </div>
@@ -788,7 +787,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                   background:r.place<=3?'rgba(201,168,76,0.06)':'rgba(0,0,0,0.15)',
                   border:`1px solid ${r.place===1?'rgba(201,168,76,0.3)':r.place<=3?'rgba(201,168,76,0.15)':'rgba(255,255,255,0.05)'}` }}>
                   <span style={{ fontSize:'1.1rem' }}>{medal}</span>
-                  <Avatar name={r.name} src={avatars[r.name]} size={30} />
+                  <Avatar name={r.name} avatars={avatars} size={30} />
                   <span style={{ flex:1,fontWeight:600,fontSize:'0.95rem' }}>{r.name}</span>
                   {r.payout>0&&<span className="font-display profit-pos" style={{ fontSize:'0.9rem' }}>+{formatEuro(r.payout)}</span>}
                 </div>
