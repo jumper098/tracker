@@ -116,8 +116,10 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   }
 
   // ─── Sync to DB ────────────────────────────────────────────────────────────
-  const isApplyingRemote = useRef(false)
-  function syncDb(t, immediate = false) {
+  const justSynced = useRef(false)
+  function syncDb(t) {
+    justSynced.current = true
+    setTimeout(() => { justSynced.current = false }, 2000)
     db.from('live_tournament').upsert(
       { id: 'current', data: { tournament: t }, updated_at: new Date().toISOString() },
       { onConflict: 'id' }
@@ -136,9 +138,20 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
 
     const ch = db.channel('live_t')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'live_tournament' }, p => {
+        if (justSynced.current) return // ignore our own updates
         const t = p.new?.data?.tournament
         if (t) {
-          applyState(t, true)
+          // Only update players/results from remote, keep local timer running
+          setTournament(prev => {
+            if (!prev) { applyState(t, true); return prev }
+            // If level changed remotely, do full applyState
+            if (t.timerLevel !== prev.timerLevel || t.timerPaused !== prev.timerPaused) {
+              applyState(t, true)
+              return prev
+            }
+            // Otherwise just update players/results
+            return { ...prev, players: t.players, results: t.results }
+          })
         } else {
           if (timerRef.current) clearInterval(timerRef.current)
           setTournament(null)
