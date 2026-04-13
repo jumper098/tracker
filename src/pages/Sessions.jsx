@@ -387,7 +387,7 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                               <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>{s.player_name}</div>
                               {(yearBadges[s.player_name] || []).map((b, i) => (
-                                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1, gap: '3px' }}>
                                   <span style={{ fontSize: '0.75rem' }}>{b.emoji}</span>
                                   <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', fontWeight: 600 }}>{b.year}</span>
                                 </div>
