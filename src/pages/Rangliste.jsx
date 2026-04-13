@@ -1,4 +1,5 @@
 import Avatar from '../components/Avatar'
+import { calcYearBadges } from '../lib/badges'
 import { safeName } from '../lib/safeName'
 import { useState } from 'react'
 import { formatEuro, formatEuroSign, formatDate, profitClass } from '../lib/helpers'
@@ -114,6 +115,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
 
   const h2h = (h2hA && h2hB && h2hA !== h2hB) ? calcH2H(h2hA, h2hB, h2hYear) : null
   const MEDALS = ['🥇', '🥈', '🥉']
+  const yearBadges = calcYearBadges(sessions)
 
   // ─── Live Quick Stats ────────────────────────────────────────────────────
   const quickStats = (() => {
@@ -273,7 +275,23 @@ export default function Rangliste({ sessions, avatars = {} }) {
               </div>
               <Avatar name={p.name} avatars={avatars} size={42} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: '1rem' }}>{p.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 600, fontSize: '1rem' }}>{p.name}</span>
+                  {(yearBadges[p.name] || []).map((b, i) => (
+                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                      <span style={{ fontSize: '0.85rem' }}>{b.emoji}</span>
+                      <span style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif' }}>{b.year}</span>
+                    </div>
+                  ))}
+                </div>
+                  {(yearBadges[p.name] || []).map((b, i) => (
+                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                      <span style={{ fontSize: '0.85rem' }}>{b.emoji}</span>
+                      <span style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif' }}>{b.year}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div className={`font-display ${profitClass(p.profit)}`} style={{ fontSize: '1rem' }}>{formatEuroSign(p.profit)}</div>

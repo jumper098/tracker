@@ -5,6 +5,7 @@ import { calcSettlement } from '../lib/settlement'
 import { showToast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Avatar from '../components/Avatar'
+import { calcYearBadges } from '../lib/badges'
 import { safeName } from '../lib/safeName'
 
 export default function Sessions({ sessions, onRefresh, avatars = {} }) {
@@ -33,6 +34,7 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
     byDate[s.date].push(s)
   })
   const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a))
+  const yearBadges = calcYearBadges(sessions)
 
   // Year filter
   const years = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
@@ -382,7 +384,15 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
                               fontSize: '0.8rem', flexShrink: 0,
                             }}>👤</div>
                           )}
-                          <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{s.player_name}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>{s.player_name}</div>
+                              {(yearBadges[s.player_name] || []).map((b, i) => (
+                                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                                  <span style={{ fontSize: '0.75rem' }}>{b.emoji}</span>
+                                  <span style={{ fontSize: '0.45rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif' }}>{b.year}</span>
+                                </div>
+                              ))}
+                            </div>
                         </div>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                           Buy-In: {formatEuro(s.buy_in)}
