@@ -389,7 +389,7 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
                               {(yearBadges[s.player_name] || []).map((b, i) => (
                                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
                                   <span style={{ fontSize: '0.75rem' }}>{b.emoji}</span>
-                                  <span style={{ fontSize: '0.45rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif' }}>{b.year}</span>
+                                  <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', fontWeight: 600 }}>{b.year}</span>
                                 </div>
                               ))}
                             </div>

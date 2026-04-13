@@ -236,7 +236,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
                 {stat.players.length > 2 && (
                   <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)' }}>+{stat.players.length - 2} weitere</div>
                 )}
-                <div style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.06em', marginTop: '4px' }}>
+                <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', fontWeight: 600, letterSpacing: '0.06em', marginTop: '4px' }}>
                   {stat.label}
                 </div>
               </div>
@@ -280,7 +280,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
                   {(yearBadges[p.name] || []).map((b, i) => (
                     <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
                       <span style={{ fontSize: '0.85rem' }}>{b.emoji}</span>
-                      <span style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif' }}>{b.year}</span>
+                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', fontWeight: 600 }}>{b.year}</span>
                     </div>
                   ))}
                 </div>
