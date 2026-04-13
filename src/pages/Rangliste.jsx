@@ -6,7 +6,7 @@ import { formatEuro, formatEuroSign, formatDate, profitClass } from '../lib/help
 
 export default function Rangliste({ sessions, avatars = {} }) {
   const years = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
-  const [yearFilter, setYearFilter] = useState(() => years.length > 0 ? years[0] : 'all')
+  const [yearFilter, setYearFilter] = useState(() => years.length > 0 ? years[0] : years[0])
   const [expanded, setExpanded] = useState({})
   const [h2hOpen, setH2hOpen] = useState(false)
   const [h2hA, setH2hA] = useState('')
@@ -247,7 +247,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
 
       {/* Year filter */}
       <div style={{ display: 'flex', gap: '6px', marginBottom: '20px' }}>
-        {[...years, 'all'].map(y => (
+        {years.map(y => (
           <button key={y} onClick={() => setYearFilter(y)} className="btn-ghost"
             style={{
               flex: 1, textAlign: 'center',
@@ -255,7 +255,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
               borderColor: yearFilter === y ? 'rgba(201,168,76,0.5)' : undefined,
               color: yearFilter === y ? 'var(--gold-light)' : undefined,
             }}>
-            {y === 'all' ? 'Alle' : y}
+            {y}
           </button>
         ))}
       </div>
@@ -403,7 +403,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
 
             {/* Year filter */}
             <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
-              {[...years, 'all'].map(y => (
+              {years.map(y => (
                 <button key={y} onClick={() => setH2hYear(y)} className="btn-ghost"
                   style={{
                     flex: 1, textAlign: 'center',
@@ -412,7 +412,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
                     color: h2hYear === y ? 'var(--gold-light)' : undefined,
                     fontSize: '0.7rem', padding: '6px 4px',
                   }}>
-                  {y === 'all' ? 'Alle' : y}
+                  {y}
                 </button>
               ))}
             </div>
