@@ -276,15 +276,7 @@ export default function Rangliste({ sessions, avatars = {} }) {
               <Avatar name={p.name} avatars={avatars} size={42} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 600, fontSize: '1rem' }}>{p.name}</span>
-                  {(yearBadges[p.name] || []).map((b, i) => (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
-                      <span style={{ fontSize: '0.85rem' }}>{b.emoji}</span>
-                      <span style={{ fontSize: '0.5rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif' }}>{b.year}</span>
-                    </div>
-                  ))}
-                </div>
                   {(yearBadges[p.name] || []).map((b, i) => (
                     <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
                       <span style={{ fontSize: '0.85rem' }}>{b.emoji}</span>
