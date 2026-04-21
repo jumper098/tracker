@@ -763,7 +763,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
             <div style={{ display:'flex',gap:'10px' }}>
               <button className="btn-ghost" style={{ flex:1 }} onClick={()=>setRebuyConfirm(null)}>Abbrechen</button>
               <button className="btn-ghost" style={{ flex:1,borderColor:'rgba(244,114,182,0.5)',color:'#f472b6' }}
-                onClick={() => { addRebuy(rebuyConfirm); setRebuyConfirm(null); setView('live') }}>✓ Bestätigen</button>
+                onClick={() => { addRebuy(rebuyConfirm); setRebuyConfirm(null) }}>✓ Bestätigen</button>
             </div>
           </div>
         </div>
