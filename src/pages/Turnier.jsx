@@ -36,8 +36,11 @@ const BLIND_PRESETS = {
   },
 }
 
-function calcRemaining(t, level) {
-  const totalSecs = (t.blinds[level]?.duration || 20) * 60
+// Timer is always calculated from timerStartedAt — survives reloads
+function calcRemaining(t) {
+  if (!t) return 0
+  const lvl = t.timerLevel || 0
+  const totalSecs = (t.blinds[lvl]?.duration || 20) * 60
   if (t.timerPaused) return Math.max(0, totalSecs - (t.timerElapsed || 0))
   if (t.timerStartedAt) {
     const elapsed = Math.floor((Date.now() - t.timerStartedAt) / 1000)
@@ -48,15 +51,12 @@ function calcRemaining(t, level) {
 
 export default function Turnier({ sessions, tournaments, onRefresh, players, avatars = {} }) {
   const [view, setView] = useState('create')
-  const [tournament, setTournament] = useState(null)
-  const [level, setLevel] = useState(0)
+  const [t, setT] = useState(null)
   const [timeLeft, setTimeLeft] = useState(0)
-  const [paused, setPaused] = useState(false)
-  const [confirm, setConfirm] = useState(null)
-  const [detailT, setDetailT] = useState(null)
-  const [rebuyConfirm, setRebuyConfirm] = useState(null)
+  const timerRef = useRef(null)
+  const tRef = useRef(null)
 
-  // Form state
+  // Form
   const [tName, setTName] = useState('Poker Turnier')
   const [tBuyin, setTBuyin] = useState('20')
   const [tChips, setTChips] = useState('5000')
@@ -66,118 +66,110 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   const [payouts, setPayouts] = useState([{place:1,pct:50},{place:2,pct:30},{place:3,pct:20}])
   const [globalDur, setGlobalDur] = useState('')
 
-  const timerRef = useRef(null)
-  const pausedRef = useRef(false)
-  const tRef = useRef(null)
-  const levelRef = useRef(0)
+  // UI
+  const [confirm, setConfirm] = useState(null)
+  const [detailT, setDetailT] = useState(null)
+  const [rebuyConfirm, setRebuyConfirm] = useState(null)
 
-  useEffect(() => { tRef.current = tournament }, [tournament])
-  useEffect(() => { levelRef.current = level }, [level])
+  // Keep tRef current
+  useEffect(() => { tRef.current = t }, [t])
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
-  // ─── Local timer tick ──────────────────────────────────────────────────────
-  function startTick(t, lvl) {
+  // ── Timer ─────────────────────────────────────────────────────────────────
+  function startTimer(tournament) {
     if (timerRef.current) clearInterval(timerRef.current)
-    if (t.timerPaused) return
+    if (!tournament || tournament.timerPaused) {
+      setTimeLeft(calcRemaining(tournament))
+      return
+    }
+    setTimeLeft(calcRemaining(tournament))
     timerRef.current = setInterval(() => {
-      if (pausedRef.current) return
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current)
-          const cur = tRef.current
-          if (!cur) return 0
-          const nextLvl = levelRef.current + 1
-          if (nextLvl < cur.blinds.length) {
-            showToast(cur.blinds[nextLvl].pause ? '☕ Pause!' : '🔔 Nächstes Level!')
-            doAdvance(cur, nextLvl)
-          } else {
-            showToast('🏁 Letztes Level!')
-          }
-          return 0
+      const cur = tRef.current
+      if (!cur || cur.timerPaused) { clearInterval(timerRef.current); return }
+      const rem = calcRemaining(cur)
+      setTimeLeft(rem)
+      if (rem <= 0) {
+        clearInterval(timerRef.current)
+        const nextLvl = (cur.timerLevel || 0) + 1
+        if (nextLvl < cur.blinds.length) {
+          showToast(cur.blinds[nextLvl].pause ? '☕ Pause!' : '🔔 Nächstes Level!')
+          advanceLevel(cur, nextLvl)
+        } else {
+          showToast('🏁 Letztes Level!')
         }
-        return prev - 1
-      })
+      }
     }, 1000)
   }
 
-  // ─── Apply tournament state ────────────────────────────────────────────────
-  function applyState(t) {
-    if (!t) return
-    const lvl = typeof t.timerLevel === 'number' ? t.timerLevel : 0
-    const rem = calcRemaining(t, lvl)
-    setTournament(t)
-    setLevel(lvl)
-    setTimeLeft(rem)
-    setPaused(t.timerPaused || false)
-    pausedRef.current = t.timerPaused || false
-    startTick(t, lvl)
-  }
+  // ── DB ────────────────────────────────────────────────────────────────────
+  // Each client has a unique ID — we embed it in writes to ignore our own echoes
+  const myId = useRef(Math.random().toString(36).slice(2))
 
-  // ─── Sync to DB ────────────────────────────────────────────────────────────
-  const justSynced = useRef(false)
-  function syncDb(t) {
-    justSynced.current = true
-    setTimeout(() => { justSynced.current = false }, 5000)
+  function writeDb(tournament) {
     db.from('live_tournament').upsert(
-      { id: 'current', data: { tournament: t }, updated_at: new Date().toISOString() },
+      { id: 'current', data: { tournament, writerId: myId.current }, updated_at: new Date().toISOString() },
       { onConflict: 'id' }
     ).catch(() => {})
   }
 
-  // ─── Realtime + initial load ───────────────────────────────────────────────
-  useEffect(() => {
-    async function load() {
-      try {
-        const { data } = await db.from('live_tournament').select('data').eq('id', 'current').single()
-        if (data?.data?.tournament) { applyState(data.data.tournament); setView('live') }
-      } catch(e) {}
-    }
-    load()
+  function updateT(updater) {
+    setT(prev => {
+      if (!prev) return prev
+      const updated = typeof updater === 'function' ? updater(prev) : updater
+      writeDb(updated)
+      return updated
+    })
+  }
 
-    const ch = db.channel('live_t')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_tournament' }, p => {
-        if (justSynced.current) return
-        const t = p.new?.data?.tournament
-        if (t) {
-          const lvl = typeof t.timerLevel === 'number' ? t.timerLevel : 0
-          const rem = calcRemaining(t, lvl)
-          setTournament(t)
-          setLevel(lvl)
-          setTimeLeft(rem)
-          setPaused(t.timerPaused || false)
-          pausedRef.current = t.timerPaused || false
+  // ── Realtime + initial load ───────────────────────────────────────────────
+  useEffect(() => {
+    // Load existing tournament on mount
+    db.from('live_tournament').select('data').eq('id', 'current').single()
+      .then(({ data }) => {
+        if (data?.data?.tournament) {
+          const tournament = data.data.tournament
+          setT(tournament)
           setView('live')
-          startTick(t, lvl)
+          startTimer(tournament)
+        }
+      }).catch(() => {})
+
+    // Listen for remote changes only
+    const ch = db.channel('live_t')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_tournament' }, payload => {
+        // Ignore our own writes
+        if (payload.new?.data?.writerId === myId.current) return
+
+        const tournament = payload.new?.data?.tournament
+        if (tournament) {
+          setT(prev => {
+            const lvlChanged = !prev || tournament.timerLevel !== prev.timerLevel
+            const pauseChanged = !prev || tournament.timerPaused !== prev.timerPaused
+            if (lvlChanged || pauseChanged) {
+              startTimer(tournament)
+            }
+            return tournament
+          })
+          setView('live')
         } else {
           if (timerRef.current) clearInterval(timerRef.current)
-          setTournament(null)
+          setT(null)
           setView('create')
         }
       })
       .subscribe()
+
     return () => db.removeChannel(ch)
   }, [])
 
-  // ─── Advance level ─────────────────────────────────────────────────────────
-  function doAdvance(t, nextLvl) {
-    const updated = { ...t, timerLevel: nextLvl, timerElapsed: 0, timerStartedAt: Date.now(), timerPaused: false }
-    setLevel(nextLvl)
-    setTimeLeft(calcRemaining(updated, nextLvl))
-    setPaused(false)
-    pausedRef.current = false
-    setTournament(updated)
-    startTick(updated, nextLvl)
-    syncDb(updated)
-  }
-
-  // ─── Start tournament ──────────────────────────────────────────────────────
+  // ── Actions ───────────────────────────────────────────────────────────────
   function startTournament() {
     if (tPlayers.length < 2) { showToast('⚠ Mindestens 2 Spieler'); return }
     const activeBlinds = blinds.filter(b => b.pause || (b.sb && b.bb))
     if (activeBlinds.length === 0) { showToast('⚠ Mindestens 1 Level'); return }
-    const pot = tPlayers.length * parseFloat(tBuyin || 20)
-    const t = {
-      id: Date.now().toString(),
+    const now = Date.now()
+    const newT = {
+      id: now.toString(),
       name: tName || 'Turnier',
       buyin: parseFloat(tBuyin) || 20,
       chips: parseInt(tChips) || 5000,
@@ -188,113 +180,99 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       results: [],
       timerLevel: 0,
       timerElapsed: 0,
-      timerStartedAt: Date.now(),
+      timerStartedAt: now,
       timerPaused: false,
     }
-    applyState(t)
+    setT(newT)
     setView('live')
-    syncDb(t)
+    startTimer(newT)
+    writeDb(newT)
   }
 
-  // ─── Tournament actions ────────────────────────────────────────────────────
   function toggleTimer() {
-    setTournament(prev => {
+    setT(prev => {
       if (!prev) return prev
-      const totalSecs = (prev.blinds[level]?.duration || 20) * 60
-      const nowPaused = !prev.timerPaused
-      const elapsed = nowPaused ? (totalSecs - timeLeft) : (prev.timerElapsed || 0)
-      pausedRef.current = nowPaused
-      setPaused(nowPaused)
-      if (nowPaused) {
-        if (timerRef.current) clearInterval(timerRef.current)
+      const lvl = prev.timerLevel || 0
+      const totalSecs = (prev.blinds[lvl]?.duration || 20) * 60
+      let updated
+      if (prev.timerPaused) {
+        updated = { ...prev, timerPaused: false, timerStartedAt: Date.now() }
+        startTimer(updated)
       } else {
-        const updated = { ...prev, timerPaused: false, timerElapsed: elapsed, timerStartedAt: Date.now() }
-        startTick(updated, level)
-        syncDb(updated)
-        return updated
+        const elapsed = totalSecs - calcRemaining(prev)
+        if (timerRef.current) clearInterval(timerRef.current)
+        updated = { ...prev, timerPaused: true, timerElapsed: elapsed, timerStartedAt: null }
+        setTimeLeft(calcRemaining(updated))
       }
-      const updated = { ...prev, timerPaused: true, timerElapsed: elapsed, timerStartedAt: null }
-      syncDb(updated)
+      writeDb(updated)
       return updated
     })
+  }
+
+  function advanceLevel(cur, nextLvl) {
+    const updated = { ...cur, timerLevel: nextLvl, timerElapsed: 0, timerStartedAt: Date.now(), timerPaused: false }
+    setT(updated)
+    startTimer(updated)
+    writeDb(updated)
   }
 
   function addRebuy(name) {
-    setTournament(prev => {
-      if (!prev) return prev
-      const updated = {
-        ...prev,
-        players: prev.players.map(p => p.name === name ? {...p, rebuys: (p.rebuys||0)+1, eliminated: false, place: null} : p)
-      }
-      syncDb(updated)
-      return updated
-    })
+    updateT(prev => ({
+      ...prev,
+      players: prev.players.map(p => p.name === name ? { ...p, rebuys: (p.rebuys||0)+1, eliminated: false, place: null } : p)
+    }))
     showToast(`↺ Rebuy für ${name}`)
   }
 
   function removeRebuy(name) {
-    setTournament(prev => {
-      if (!prev) return prev
-      const updated = {
-        ...prev,
-        players: prev.players.map(p => p.name === name && (p.rebuys||0) > 0 ? {...p, rebuys: p.rebuys-1} : p)
-      }
-      syncDb(updated)
-      return updated
-    })
+    updateT(prev => ({
+      ...prev,
+      players: prev.players.map(p => p.name === name && (p.rebuys||0) > 0 ? { ...p, rebuys: p.rebuys-1 } : p)
+    }))
   }
 
   function eliminatePlayer(name) {
-    setTournament(prev => {
+    setT(prev => {
       if (!prev) return prev
-      const remaining = prev.players.filter(p => !p.eliminated).length
-      const place = remaining
+      const remaining = prev.players.filter(p => !p.eliminated && p.name !== name)
+      const place = remaining.length + 1
       const updated = {
         ...prev,
-        players: prev.players.map(p => p.name === name ? {...p, eliminated: true, place} : p),
-        results: [...(prev.results||[]), {name, place}],
+        players: prev.players.map(p => p.name === name ? { ...p, eliminated: true, place } : p),
+        results: [...(prev.results||[]).filter(r=>r.name!==name), { name, place }],
       }
-      const stillIn = updated.players.filter(p => !p.eliminated)
-      if (stillIn.length === 1) {
-        const winner = stillIn[0]
-        updated.players = updated.players.map(p => p.name === winner.name ? {...p, place: 1} : p)
-        updated.results = [...updated.results, {name: winner.name, place: 1}]
-        showToast(`🏆 ${winner.name} gewinnt!`)
-      }
-      syncDb(updated)
+      writeDb(updated)
       return updated
     })
   }
 
-  async function endTournament() {
-    if (!tournament) return
-    if (timerRef.current) clearInterval(timerRef.current)
-    const pot = getTotalPot(tournament)
-    const results = (tournament.results||[]).map(r => ({
-      ...r,
-      payout: tournament.payouts[r.place-1] ? Math.round(pot * tournament.payouts[r.place-1].pct / 100) : 0
+  function rejoinPlayer(name) {
+    updateT(prev => ({
+      ...prev,
+      players: prev.players.map(p => p.name === name ? { ...p, eliminated: false, place: null } : p),
+      results: (prev.results||[]).filter(r => r.name !== name),
     }))
+  }
+
+  async function endTournament() {
+    if (!t) return
     const { error } = await db.from('poker_tournaments').insert([{
       id: crypto.randomUUID(),
-      name: tournament.name,
-      date: tournament.date,
-      buyin: tournament.buyin,
-      players: tournament.players,
-      results,
-      payouts: tournament.payouts,
+      name: t.name, date: t.date, buyin: t.buyin,
+      players: t.players, results: t.results, payouts: t.payouts,
     }])
     if (error) { showToast('Fehler: ' + error.message); return }
     await db.from('live_tournament').delete().eq('id', 'current')
-    showToast('✓ Turnier gespeichert!')
-    setTournament(null)
+    if (timerRef.current) clearInterval(timerRef.current)
+    setT(null)
     setView('create')
     onRefresh()
+    showToast('✓ Turnier gespeichert!')
   }
 
   async function deleteTournament(id) {
     setConfirm({
-      title: '✕ Turnier löschen?',
-      text: 'Dieses Turnier wirklich löschen?',
+      title: '✕ Turnier löschen?', text: 'Dieses Turnier wirklich löschen?',
       onOk: async () => {
         setConfirm(null)
         await db.from('poker_tournaments').delete().eq('id', id)
@@ -304,30 +282,22 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     })
   }
 
-  function getTotalPot(t) {
-    const rebuys = t.players.reduce((s, p) => s + (p.rebuys||0), 0)
-    return (t.players.length + rebuys) * t.buyin
-  }
-
-  // ─── Computed values ───────────────────────────────────────────────────────
-  const totalPot = tournament ? getTotalPot(tournament) : 0
-  const totalRebuys = tournament ? tournament.players.reduce((s,p) => s+(p.rebuys||0), 0) : 0
-  const currentBlind = tournament?.blinds[level]
-  const nextBlind = tournament?.blinds[level+1]
+  // ── Computed ──────────────────────────────────────────────────────────────
+  const lvl = t?.timerLevel || 0
+  const currentBlind = t?.blinds[lvl]
+  const nextBlind = t?.blinds[lvl+1]
   const isPause = currentBlind?.pause
   const timerMin = String(Math.floor(timeLeft/60)).padStart(2,'0')
   const timerSec = String(timeLeft%60).padStart(2,'0')
   const timerColor = isPause ? '#60a5fa' : timeLeft<=60 ? '#f87171' : '#4ade80'
-  const realLevelNum = tournament ? tournament.blinds.slice(0,level+1).filter(b=>!b.pause).length : 0
-  const activePlayers = tournament ? tournament.players.filter(p=>!p.eliminated).length : 0
-  const totalChips = tournament ? (tournament.players.length + totalRebuys) * tournament.chips : 0
+  const realLevelNum = t ? t.blinds.slice(0,lvl+1).filter(b=>!b.pause).length : 0
+  const activePlayers = t ? t.players.filter(p=>!p.eliminated).length : 0
+  const totalRebuys = t ? t.players.reduce((s,p) => s+(p.rebuys||0), 0) : 0
+  const totalPot = t ? (t.players.length + totalRebuys) * t.buyin : 0
+  const totalChips = t ? (t.players.length + totalRebuys) * t.chips : 0
   const avgStack = activePlayers > 0 ? Math.round(totalChips / activePlayers) : 0
 
-  const allResults = tournaments.flatMap(t => t.results||[])
-  const winCounts = {}
-  allResults.filter(r=>r.place===1).forEach(r => { winCounts[r.name]=(winCounts[r.name]||0)+1 })
-  const topWinner = Object.entries(winCounts).sort((a,b)=>b[1]-a[1])[0]
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: '20px 16px 100px' }}>
       <div style={{ textAlign:'center', marginBottom:'20px', paddingTop:'12px' }}>
@@ -338,7 +308,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       {view !== 'live' && (
         <div style={{ display:'flex', gap:'6px', marginBottom:'20px' }}>
           {[
-            ...(tournament ? [{id:'live',label:'🔴 Live'}] : []),
+            ...(t ? [{id:'live',label:'🔴 Live'}] : []),
             {id:'create',label:'✚ Erstellen'},
             {id:'history',label:'📋 Verlauf'},
             {id:'rankings',label:'🏆 Rangliste'},
@@ -368,60 +338,50 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                 <input className="input-field" type="number" value={tBuyin} onChange={e=>setTBuyin(e.target.value)} />
               </div>
               <div>
-                <label className="section-label">Start-Chips</label>
+                <label className="section-label">Startchips</label>
                 <input className="input-field" type="number" value={tChips} onChange={e=>setTChips(e.target.value)} />
               </div>
             </div>
           </div>
 
-          {/* Blind presets */}
-          <div className="card" style={{ marginBottom:'14px' }}>
-            <div className="font-display" style={{ fontSize:'0.75rem', color:'var(--gold)', letterSpacing:'0.1em', marginBottom:'12px' }}>BLIND-STRUKTUR</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px' }}>
-              {Object.entries(BLIND_PRESETS).map(([key, p]) => (
-                <button key={key} onClick={() => { setPreset(key); setBlinds(p.blinds.map(b=>({...b}))); setTChips(String(p.chips)) }}
-                  style={{ padding:'14px 10px', borderRadius:'10px', cursor:'pointer', textAlign:'center',
-                    border:`1px solid ${preset===key ? p.color : p.color+'40'}`,
-                    background: preset===key ? p.color+'18' : p.color+'08' }}>
-                  <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.8rem', color:p.color, marginBottom:'4px' }}>{p.label}</div>
-                  <div style={{ fontSize:'0.62rem', color:p.color+'99' }}>{p.desc}</div>
-                </button>
-              ))}
-              <button onClick={() => { setPreset('custom'); setBlinds([{sb:'',bb:'',duration:20}]) }}
-                style={{ padding:'14px 10px', borderRadius:'10px', cursor:'pointer', textAlign:'center',
-                  border:`1px solid ${preset==='custom' ? '#a78bfa' : '#a78bfa40'}`,
-                  background: preset==='custom' ? '#a78bfa18' : '#a78bfa08' }}>
-                <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.8rem', color:'#a78bfa', marginBottom:'4px' }}>✏ CUSTOM</div>
-                <div style={{ fontSize:'0.62rem', color:'#a78bfa99' }}>Eigene Struktur</div>
+          {/* Presets */}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'6px', marginBottom:'14px' }}>
+            {[
+              ...Object.entries(BLIND_PRESETS).map(([key,p]) => ({key,...p})),
+              {key:'custom',label:'✏ CUSTOM',color:'#a78bfa',desc:'Eigene Struktur',chips:5000,blinds:[]}
+            ].map(p => (
+              <button key={p.key} onClick={() => {
+                setPreset(p.key)
+                if (p.key !== 'custom') { setBlinds(p.blinds.map(b=>({...b}))); setTChips(String(p.chips)) }
+              }} className="btn-ghost" style={{
+                padding:'8px 4px', textAlign:'center',
+                background: preset===p.key ? 'rgba(201,168,76,0.15)' : undefined,
+                borderColor: preset===p.key ? p.color : undefined,
+              }}>
+                <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.62rem', color: preset===p.key ? p.color : 'var(--text-muted)' }}>{p.label}</div>
+                <div style={{ fontSize:'0.55rem', color:'var(--text-muted)', marginTop:'2px' }}>{p.desc}</div>
               </button>
-            </div>
+            ))}
+          </div>
 
-            {/* Global duration */}
+          {/* Blind table */}
+          <div className="card" style={{ marginBottom:'14px' }}>
+            <div className="font-display" style={{ fontSize:'0.75rem', color:'var(--gold)', letterSpacing:'0.1em', marginBottom:'12px' }}>BLIND STRUKTUR</div>
             <div style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'10px', padding:'8px 10px', borderRadius:'8px', background:'rgba(201,168,76,0.05)', border:'1px solid rgba(201,168,76,0.15)' }}>
               <span style={{ fontSize:'0.7rem', color:'var(--text-muted)', fontFamily:'Cinzel,serif', whiteSpace:'nowrap' }}>Alle Level:</span>
-              <input className="input-field" type="number" placeholder="Min" value={globalDur}
-                onChange={e=>setGlobalDur(e.target.value)} style={{ width:'70px', textAlign:'center' }} />
+              <input className="input-field" type="number" placeholder="Min" value={globalDur} onChange={e=>setGlobalDur(e.target.value)} style={{ width:'70px', textAlign:'center' }} />
               <button className="btn-ghost" style={{ flex:1, fontSize:'0.65rem' }}
-                onClick={() => { const d=parseInt(globalDur); if(d) setBlinds(prev=>prev.map(b=>b.pause?b:{...b,duration:d})) }}>
-                ✓ Übernehmen
-              </button>
+                onClick={() => { const d=parseInt(globalDur); if(d) setBlinds(prev=>prev.map(b=>b.pause?b:{...b,duration:d})) }}>✓ Übernehmen</button>
             </div>
-
-            {/* Blind table header */}
-            <div style={{ display:'grid', gridTemplateColumns:'24px 1fr 1fr 56px 32px', gap:'4px', padding:'4px 6px', borderRadius:'6px', background:'rgba(201,168,76,0.08)', marginBottom:'6px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'24px 1fr 1fr 56px 36px', gap:'4px', padding:'4px 6px', borderRadius:'6px', background:'rgba(201,168,76,0.08)', marginBottom:'6px' }}>
               {['#','SB','BB','MIN',''].map((h,i) => (
                 <div key={i} style={{ fontFamily:'Cinzel,serif', fontSize:'0.52rem', color:'var(--gold)', textAlign:'center' }}>{h}</div>
               ))}
             </div>
-
-            {/* Blind rows */}
             <div style={{ display:'flex', flexDirection:'column', gap:'4px', marginBottom:'8px' }}>
               {blinds.map((b, i) => (
-                <div key={i} style={{ display:'grid', gridTemplateColumns:'24px 1fr 1fr 56px 36px', gap:'4px', alignItems:'center',
-                  background: b.pause ? 'rgba(96,165,250,0.05)' : 'transparent', borderRadius:'6px', padding:'2px 0' }}>
-                  <div style={{ textAlign:'center', fontSize:'0.65rem', color: b.pause ? '#60a5fa' : 'var(--text-muted)' }}>
-                    {b.pause ? '☕' : i+1}
-                  </div>
+                <div key={i} style={{ display:'grid', gridTemplateColumns:'24px 1fr 1fr 56px 36px', gap:'4px', alignItems:'center', background: b.pause?'rgba(96,165,250,0.05)':'transparent', borderRadius:'6px', padding:'2px 0' }}>
+                  <div style={{ textAlign:'center', fontSize:'0.65rem', color: b.pause?'#60a5fa':'var(--text-muted)' }}>{b.pause?'☕':i+1}</div>
                   {b.pause ? (
                     <div style={{ gridColumn:'2/4', fontSize:'0.75rem', color:'#60a5fa', padding:'6px 8px', fontFamily:'Cinzel,serif', letterSpacing:'0.1em' }}>☕ PAUSE</div>
                   ) : (
@@ -434,51 +394,38 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                   )}
                   <input className="input-field" type="number" value={b.duration} style={{ padding:'6px 8px', textAlign:'center' }}
                     onChange={e=>setBlinds(prev=>prev.map((bl,idx)=>idx===i?{...bl,duration:e.target.value}:bl))} />
-                  <button className="btn-danger" style={{ padding:'4px' }}
-                    onClick={()=>setBlinds(prev=>prev.filter((_,idx)=>idx!==i))}>✕</button>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'2px' }}>
+                    <button className="btn-danger" style={{ padding:'3px 4px', fontSize:'0.6rem' }}
+                      onClick={()=>setBlinds(prev=>prev.filter((_,idx)=>idx!==i))}>✕</button>
+                    {!b.pause && (
+                      <button onClick={() => setBlinds(prev => { const n=[...prev]; n.splice(i+1,0,{pause:true,duration:10}); return n })}
+                        style={{ padding:'3px 4px', fontSize:'0.6rem', borderRadius:'4px', border:'1px solid rgba(96,165,250,0.4)', background:'rgba(96,165,250,0.08)', color:'#60a5fa', cursor:'pointer' }}>☕</button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
-
-            <div style={{ display:'flex', gap:'8px' }}>
-              <button className="btn-ghost" style={{ flex:1, fontSize:'0.65rem' }}
-                onClick={()=>setBlinds(prev=>[...prev,{sb:'',bb:'',duration:20}])}>+ Level</button>
-              <select className="input-field" style={{ flex:1, fontSize:'0.65rem', color:'#60a5fa', borderColor:'rgba(96,165,250,0.3)', padding:'8px', cursor:'pointer' }}
-                value="" onChange={e => {
-                  const idx = parseInt(e.target.value)
-                  if (isNaN(idx)) return
-                  setBlinds(prev => { const n=[...prev]; n.splice(idx+1,0,{pause:true,duration:10}); return n })
-                  e.target.value=""
-                }}>
-                <option value="">☕ Pause nach Level...</option>
-                {blinds.map((b,i) => !b.pause && (
-                  <option key={i} value={i}>Nach Level {blinds.slice(0,i+1).filter(b=>!b.pause).length} ({b.sb}/{b.bb})</option>
-                ))}
-              </select>
-            </div>
+            <button className="btn-ghost" style={{ width:'100%', fontSize:'0.65rem' }}
+              onClick={()=>setBlinds(prev=>[...prev,{sb:'',bb:'',duration:20}])}>+ Level</button>
           </div>
 
           {/* Payouts */}
           <div className="card" style={{ marginBottom:'14px' }}>
             <div className="font-display" style={{ fontSize:'0.75rem', color:'var(--gold)', letterSpacing:'0.1em', marginBottom:'12px' }}>AUSZAHLUNGSSTRUKTUR</div>
-            {payouts.map((p,i) => {
+            {payouts.map((p, i) => {
               const pot = tPlayers.length * parseFloat(tBuyin||20)
               const euroVal = Math.round(pot * p.pct / 100)
               return (
                 <div key={i} style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'8px' }}>
-                  <span style={{ minWidth:'24px', textAlign:'center', fontSize:'0.85rem' }}>
+                  <span style={{ minWidth:'24px', color:'var(--text-muted)', fontSize:'0.85rem', textAlign:'center' }}>
                     {i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}
                   </span>
-                  <input className="input-field" type="text" inputMode="decimal" placeholder="0"
-                    value={p.pct===0?'':String(p.pct)}
-                    onChange={e => {
-                      const raw=e.target.value.replace(',','.')
-                      const val=raw===''?0:parseFloat(raw)
-                      setPayouts(prev=>prev.map((po,idx)=>idx===i?{...po,pct:isNaN(val)?0:val}:po))
-                    }}
+                  <input className="input-field" type="text" inputMode="decimal"
+                    value={p.pct===0?'':String(p.pct)} placeholder="0"
+                    onChange={e => { const v=parseFloat(e.target.value.replace(',','.')); setPayouts(prev=>prev.map((po,idx)=>idx===i?{...po,pct:isNaN(v)?0:v}:po)) }}
                     style={{ flex:1, textAlign:'center' }} />
                   <span style={{ color:'var(--text-muted)', fontSize:'0.8rem' }}>%</span>
-                  <div style={{ textAlign:'right', minWidth:'60px' }}>
+                  <div style={{ textAlign:'right', minWidth:'48px' }}>
                     <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.8rem', color:'var(--gold)' }}>{tPlayers.length>0?euroVal+'€':'—'}</div>
                     <div style={{ fontSize:'0.62rem', color:'var(--text-muted)' }}>{p.pct>0?p.pct+'%':''}</div>
                   </div>
@@ -486,20 +433,19 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                 </div>
               )
             })}
-            <div style={{ display:'flex', gap:'8px', marginTop:'8px' }}>
+            <div style={{ display:'flex', gap:'8px', marginTop:'10px' }}>
               <button className="btn-ghost" style={{ flex:1, fontSize:'0.65rem' }}
                 onClick={()=>setPayouts(prev=>[...prev,{place:prev.length+1,pct:0}])}>+ Platz</button>
               <button className="btn-ghost" style={{ flex:1, fontSize:'0.65rem', color:'#60a5fa', borderColor:'rgba(96,165,250,0.3)' }}
                 onClick={() => {
                   const n=payouts.length
                   const pre={1:[100],2:[65,35],3:[50,30,20],4:[45,28,17,10],5:[40,25,17,11,7]}
-                  const pcts=pre[Math.min(n,5)]||Array(n).fill(0).map((_,i)=>i===0?Math.ceil(100/n):Math.floor(100/n))
+                  const pcts=pre[Math.min(n,5)]||Array(n).fill(Math.floor(100/n))
                   setPayouts(pcts.map((pct,i)=>({place:i+1,pct})))
                 }}>⚡ Auto</button>
             </div>
             <div style={{ fontSize:'0.75rem', color:payouts.reduce((s,p)=>s+(p.pct||0),0)===100?'#4ade80':'#f87171', textAlign:'right', marginTop:'8px' }}>
-              Gesamt: {payouts.reduce((s,p)=>s+(p.pct||0),0).toFixed(1)}%
-              {payouts.reduce((s,p)=>s+(p.pct||0),0)===100&&' ✓'}
+              Gesamt: {payouts.reduce((s,p)=>s+(p.pct||0),0).toFixed(1)}%{payouts.reduce((s,p)=>s+(p.pct||0),0)===100&&' ✓'}
             </div>
           </div>
 
@@ -509,7 +455,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
             <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
               {players.map(name => (
                 <button key={name} onClick={()=>setTPlayers(prev=>prev.includes(name)?prev.filter(p=>p!==name):[...prev,name])}
-                  style={{ padding:'6px 14px', borderRadius:'20px', cursor:'pointer', fontSize:'0.85rem', transition:'all 0.2s',
+                  style={{ padding:'6px 14px', borderRadius:'20px', cursor:'pointer', fontSize:'0.85rem',
                     border:`1px solid ${tPlayers.includes(name)?'rgba(201,168,76,0.6)':'rgba(255,255,255,0.1)'}`,
                     background:tPlayers.includes(name)?'rgba(201,168,76,0.15)':'transparent',
                     color:tPlayers.includes(name)?'var(--gold)':'var(--text-muted)' }}>
@@ -524,11 +470,10 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       )}
 
       {/* ── LIVE ── */}
-      {view === 'live' && tournament && (
+      {view === 'live' && t && (
         <div>
-          {/* Header */}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', padding:'8px 12px', borderRadius:'8px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
-            <span className="font-display" style={{ fontSize:'0.7rem', color:'var(--gold-light)' }}>{tournament.name}</span>
+            <span className="font-display" style={{ fontSize:'0.7rem', color:'var(--gold-light)' }}>{t.name}</span>
             <span style={{ fontSize:'0.7rem', color:'var(--text-muted)' }}>{activePlayers} im Spiel</span>
           </div>
 
@@ -553,53 +498,42 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1px 1fr 1px 1fr', background:'rgba(201,168,76,0.06)', borderTop:'1px solid rgba(201,168,76,0.2)' }}>
                   {[
                     {label:'SMALL BLIND', value:currentBlind?.sb},
+                    null,
                     {label:'BIG BLIND', value:currentBlind?.bb},
+                    null,
                     {label:'POT', value:totalPot+'€', color:'#4ade80'},
-                  ].map((item,i) => (
-                    <div key={i} style={{ textAlign:'center', padding:'12px 6px' }}>
-                      <div style={{ fontSize:'0.48rem', color:'var(--text-muted)', letterSpacing:'0.12em', marginBottom:'3px' }}>{item.label}</div>
-                      <div className="font-display" style={{ fontSize:'2rem', color:item.color||'var(--gold)', lineHeight:1 }}>{item.value}</div>
-                    </div>
-                  ))}
+                  ].map((item,i) => item===null
+                    ? <div key={i} style={{ background:'rgba(201,168,76,0.15)' }} />
+                    : <div key={i} style={{ textAlign:'center', padding:'10px 4px' }}>
+                        <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.42rem', color:'var(--text-muted)', letterSpacing:'0.1em', marginBottom:'3px' }}>{item.label}</div>
+                        <div className="font-display" style={{ fontSize:'1.1rem', color:item.color||'var(--gold)' }}>{item.value}</div>
+                      </div>
+                  )}
                 </div>
                 {nextBlind && (
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1px 1fr 1px 1fr', background:'rgba(255,255,255,0.02)', borderTop:'1px solid rgba(255,255,255,0.05)' }}>
-                    <div style={{ textAlign:'center', padding:'7px 6px' }}>
-                      <div style={{ fontSize:'0.42rem', color:'rgba(255,255,255,0.25)', letterSpacing:'0.1em', marginBottom:'2px' }}>{nextBlind.pause?'PAUSE':'NÄCHSTES SB'}</div>
-                      <div className="font-display" style={{ fontSize:'1.05rem', color:'rgba(201,168,76,0.35)' }}>{nextBlind.pause?'☕':nextBlind.sb}</div>
-                    </div>
-                    <div style={{ background:'rgba(255,255,255,0.04)' }} />
-                    <div style={{ textAlign:'center', padding:'7px 6px' }}>
-                      <div style={{ fontSize:'0.42rem', color:'rgba(255,255,255,0.25)', letterSpacing:'0.1em', marginBottom:'2px' }}>{nextBlind.pause?`${nextBlind.duration} MIN`:'NÄCHSTES BB'}</div>
-                      <div className="font-display" style={{ fontSize:'1.05rem', color:'rgba(201,168,76,0.35)' }}>{nextBlind.pause?'':nextBlind.bb}</div>
-                    </div>
-                    <div style={{ background:'rgba(255,255,255,0.04)' }} />
-                    <div style={{ textAlign:'center', padding:'7px 6px' }}>
-                      <div style={{ fontSize:'0.42rem', color:'rgba(255,255,255,0.25)', letterSpacing:'0.1em', marginBottom:'2px' }}>LEVEL {realLevelNum+1}</div>
-                      <div className="font-display" style={{ fontSize:'1.05rem', color:'rgba(201,168,76,0.35)' }}>{nextBlind.pause?'':`${nextBlind.duration}min`}</div>
-                    </div>
+                  <div style={{ display:'flex', justifyContent:'center', gap:'16px', padding:'8px 16px', background:'rgba(0,0,0,0.2)', borderTop:'1px solid rgba(255,255,255,0.04)' }}>
+                    <div style={{ fontSize:'0.6rem', color:'var(--text-muted)' }}>Nächstes: {nextBlind.pause?'☕ Pause':`${nextBlind.sb} / ${nextBlind.bb}`}</div>
+                    <div style={{ fontSize:'0.6rem', color:'var(--text-muted)' }}>{nextBlind.duration} Min</div>
                   </div>
                 )}
               </>
             )}
-
-            {/* Controls */}
             <div style={{ display:'flex', gap:'8px', justifyContent:'center', padding:'10px 16px 14px' }}>
               <button onClick={toggleTimer} style={{ padding:'9px 22px', borderRadius:'8px', cursor:'pointer', border:'1px solid rgba(74,222,128,0.4)', background:'rgba(74,222,128,0.12)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.72rem' }}>
-                {paused?'▶ WEITER':'⏸ PAUSE'}
+                {t.timerPaused ? '▶ WEITER' : '⏸ PAUSE'}
               </button>
-              <button onClick={()=>doAdvance(tournament, level-1)} disabled={level===0}
-                style={{ padding:'9px 16px', borderRadius:'8px', border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.05)', color:'var(--text-muted)', fontFamily:'Cinzel,serif', fontSize:'0.8rem', cursor:'pointer', opacity:level===0?0.3:1 }}>◄</button>
-              <button onClick={()=>doAdvance(tournament, level+1)} disabled={level>=tournament.blinds.length-1}
-                style={{ padding:'9px 16px', borderRadius:'8px', border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.05)', color:'var(--text-muted)', fontFamily:'Cinzel,serif', fontSize:'0.8rem', cursor:'pointer', opacity:level>=tournament.blinds.length-1?0.3:1 }}>►</button>
+              <button onClick={() => { if(lvl>0) advanceLevel(t,lvl-1) }} disabled={lvl===0}
+                style={{ padding:'9px 16px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'0.8rem',cursor:'pointer',opacity:lvl===0?0.3:1 }}>◄</button>
+              <button onClick={() => { if(lvl<t.blinds.length-1) advanceLevel(t,lvl+1) }} disabled={lvl>=t.blinds.length-1}
+                style={{ padding:'9px 16px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'0.8rem',cursor:'pointer',opacity:lvl>=t.blinds.length-1?0.3:1 }}>►</button>
             </div>
           </div>
 
-          {/* Pot summary */}
+          {/* Stats */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', marginBottom:'8px' }}>
             {[
               {label:'GESAMTPOT', value:totalPot+'€', color:'var(--gold)'},
-              {label:'BUY-INS', value:tournament.players.length, color:'#4ade80'},
+              {label:'BUY-INS', value:t.players.length, color:'#4ade80'},
               {label:'REBUYS', value:totalRebuys, color:'#f472b6'},
             ].map(s => (
               <div key={s.label} style={{ textAlign:'center', padding:'10px 8px', borderRadius:'10px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
@@ -610,23 +544,24 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'14px' }}>
             {[
-              {label:'CHIPS IM UMLAUF', value:totalChips.toLocaleString(), color:'#38bdf8'},
-              {label:'Ø STACK', value:avgStack.toLocaleString(), color:'#38bdf8'},
+              {label:'CHIPS IM UMLAUF', value:totalChips.toLocaleString()},
+              {label:'Ø STACK', value:avgStack.toLocaleString()},
             ].map(s => (
               <div key={s.label} style={{ textAlign:'center', padding:'8px', borderRadius:'10px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
                 <div style={{ fontSize:'0.48rem', color:'var(--text-muted)', letterSpacing:'0.1em', marginBottom:'4px', fontFamily:'Cinzel,serif' }}>{s.label}</div>
-                <div className="font-display" style={{ fontSize:'1rem', color:s.color, lineHeight:1 }}>{s.value}</div>
+                <div className="font-display" style={{ fontSize:'1rem', color:'#38bdf8', lineHeight:1 }}>{s.value}</div>
               </div>
             ))}
           </div>
 
-          {/* Payout preview */}
-          {tournament.payouts.some(p=>p.pct>0) && (
+          {/* Payouts */}
+          {t.payouts.some(p=>p.pct>0) && (
             <div style={{ display:'flex', gap:'6px', marginBottom:'14px' }}>
-              {tournament.payouts.filter(p=>p.pct>0).map((p,i) => (
+              {t.payouts.filter(p=>p.pct>0).map((p,i) => (
                 <div key={i} style={{ flex:1, textAlign:'center', padding:'8px 4px', borderRadius:'8px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ fontSize:'1rem' }}>{['🥇','🥈','🥉','4.','5.'][i]||`${i+1}.`}</div>
+                  <div style={{ fontSize:'1rem' }}>{['🥇','🥈','🥉'][i]||`${i+1}.`}</div>
                   <div className="font-display" style={{ fontSize:'0.9rem', color:'var(--gold)' }}>{Math.round(totalPot*p.pct/100)}€</div>
+                  <div style={{ fontSize:'0.6rem', color:'var(--text-muted)' }}>{p.pct}%</div>
                 </div>
               ))}
             </div>
@@ -634,17 +569,15 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
 
           {/* Active players */}
           <div style={{ marginBottom:'14px' }}>
-            <div className="font-display" style={{ fontSize:'0.7rem', color:'#4ade80', letterSpacing:'0.12em', marginBottom:'8px' }}>
-              NOCH IM SPIEL ({activePlayers})
-            </div>
+            <div className="font-display" style={{ fontSize:'0.7rem', color:'#4ade80', letterSpacing:'0.12em', marginBottom:'8px' }}>NOCH IM SPIEL ({activePlayers})</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px' }}>
-              {tournament.players.filter(p=>!p.eliminated).map(p => (
+              {t.players.filter(p=>!p.eliminated).map(p => (
                 <div key={p.name} style={{ display:'flex', alignItems:'center', gap:'5px', padding:'7px 8px', borderRadius:'10px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
                   <Avatar name={p.name} avatars={avatars} size={22} />
                   <span style={{ flex:1, fontSize:'0.72rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</span>
                   {(p.rebuys||0)>0 && (
                     <>
-                      <span style={{ fontFamily:'Cinzel,serif', fontSize:'0.65rem', color:'#f472b6', background:'rgba(244,114,182,0.12)', border:'1px solid rgba(244,114,182,0.3)', borderRadius:'6px', padding:'1px 5px', flexShrink:0 }}>{p.rebuys}×</span>
+                      <span style={{ fontFamily:'Cinzel,serif',fontSize:'0.65rem',color:'#f472b6',background:'rgba(244,114,182,0.12)',border:'1px solid rgba(244,114,182,0.3)',borderRadius:'6px',padding:'1px 5px',flexShrink:0 }}>{p.rebuys}×</span>
                       <button onClick={()=>removeRebuy(p.name)} style={{ width:'18px',height:'18px',borderRadius:'50%',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontSize:'0.7rem',cursor:'pointer',flexShrink:0 }}>−</button>
                     </>
                   )}
@@ -656,91 +589,79 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
           </div>
 
           {/* Eliminated */}
-          {tournament.players.filter(p=>p.eliminated).length>0 && (
+          {t.players.filter(p=>p.eliminated).length > 0 && (
             <div style={{ marginBottom:'14px' }}>
               <div className="font-display" style={{ fontSize:'0.7rem', color:'#f87171', letterSpacing:'0.12em', marginBottom:'8px' }}>AUSGESCHIEDEN</div>
-              {[...tournament.players.filter(p=>p.eliminated)].sort((a,b)=>(a.place||99)-(b.place||99)).map(p => {
-                const medal=p.place===1?'🥇':p.place===2?'🥈':p.place===3?'🥉':`${p.place}.`
-                const prize=tournament.payouts[p.place-1]?Math.round(totalPot*tournament.payouts[p.place-1].pct/100):0
+              {[...t.players.filter(p=>p.eliminated)].sort((a,b)=>(a.place||99)-(b.place||99)).map(p => {
+                const medal = p.place===1?'🥇':p.place===2?'🥈':p.place===3?'🥉':`${p.place}.`
+                const prize = t.payouts[p.place-1] ? Math.round(totalPot*t.payouts[p.place-1].pct/100) : 0
                 return (
                   <div key={p.name} style={{ display:'flex',alignItems:'center',gap:'8px',padding:'6px 10px',borderRadius:'8px',background:'rgba(248,113,113,0.06)',border:'1px solid rgba(248,113,113,0.15)',marginBottom:'4px' }}>
                     <span style={{ fontSize:'0.85rem' }}>{medal}</span>
+                    <Avatar name={p.name} avatars={avatars} size={22} />
                     <span style={{ fontSize:'0.78rem',color:'#f87171',flex:1 }}>{p.name}</span>
-                    {prize>0&&<span style={{ fontFamily:'Cinzel,serif',fontSize:'0.78rem',color:'#4ade80' }}>+{prize}€</span>}
-                    <button onClick={()=>setTournament(prev=>({
-                      ...prev,
-                      players:prev.players.map(pl=>pl.name===p.name?{...pl,eliminated:false,place:null}:pl),
-                      results:(prev.results||[]).filter(r=>r.name!==p.name),
-                    }))} style={{ width:'22px',height:'22px',borderRadius:'50%',border:'1px solid rgba(74,222,128,0.5)',background:'rgba(74,222,128,0.12)',color:'#4ade80',fontSize:'0.9rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>+</button>
+                    {prize>0 && <span style={{ fontFamily:'Cinzel,serif',fontSize:'0.78rem',color:'#4ade80' }}>+{prize}€</span>}
+                    <button onClick={()=>rejoinPlayer(p.name)} style={{ width:'22px',height:'22px',borderRadius:'50%',border:'1px solid rgba(74,222,128,0.5)',background:'rgba(74,222,128,0.12)',color:'#4ade80',fontSize:'0.9rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>+</button>
                   </div>
                 )
               })}
             </div>
           )}
 
-          <div style={{ display:'flex',gap:'10px' }}>
+          <div style={{ display:'flex', gap:'10px' }}>
             <button className="btn-ghost" style={{ flex:1 }} onClick={()=>setView('create')}>← Zurück</button>
             <button style={{ flex:1,background:'rgba(192,57,43,0.1)',color:'#e74c3c',border:'1px solid rgba(192,57,43,0.35)',borderRadius:'10px',padding:'13px',fontFamily:'Cinzel,serif',fontSize:'0.72rem',letterSpacing:'0.1em',cursor:'pointer' }}
-              onClick={endTournament}>✕ Beenden & Speichern</button>
+              onClick={()=>setConfirm({title:'✕ Turnier beenden?',text:'Turnier speichern und beenden?',onOk:()=>{setConfirm(null);endTournament()}})}>
+              ✕ Beenden & Speichern
+            </button>
           </div>
         </div>
       )}
 
       {/* ── HISTORY ── */}
-      {view==='history' && (
+      {view === 'history' && (
         <div>
-          {tournaments.length===0&&<div className="empty-state">Noch keine Turniere ♠</div>}
-          {[...tournaments].sort((a,b)=>b.date?.localeCompare(a.date)).map(t => (
-            <div key={t.id} className="card" style={{ marginBottom:'12px',padding:'16px',cursor:'pointer' }}
-              onClick={()=>setDetailT(t)}>
+          {tournaments.length===0 && <div className="empty-state">Noch keine Turniere ♠</div>}
+          {[...tournaments].sort((a,b)=>b.date?.localeCompare(a.date)).map(ht => (
+            <div key={ht.id} className="card" style={{ marginBottom:'12px',padding:'16px',cursor:'pointer' }} onClick={()=>setDetailT(ht)}>
               <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px' }}>
                 <div>
-                  <div className="font-display" style={{ fontSize:'0.85rem',color:'var(--gold)' }}>{t.name}</div>
-                  <div style={{ fontSize:'0.78rem',color:'var(--text-muted)' }}>
-                    {formatDate(t.date)} · {(t.players||[]).length} Spieler · {formatEuro(t.buyin)} Buy-In
-                  </div>
+                  <div className="font-display" style={{ fontSize:'0.85rem',color:'var(--gold)' }}>{ht.name}</div>
+                  <div style={{ fontSize:'0.78rem',color:'var(--text-muted)' }}>{formatDate(ht.date)} · {(ht.players||[]).length} Spieler · {formatEuro(ht.buyin)} Buy-In</div>
                 </div>
-                <button className="btn-danger" onClick={e=>{e.stopPropagation();deleteTournament(t.id)}}>✕</button>
+                <button className="btn-danger" onClick={e=>{e.stopPropagation();deleteTournament(ht.id)}}>✕</button>
               </div>
-              {[...(t.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).slice(0,3).map(r => (
+              {[...(ht.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).slice(0,3).map(r => (
                 <div key={r.name} style={{ display:'flex',justifyContent:'space-between',fontSize:'0.85rem',padding:'4px 0' }}>
                   <span>{r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':`#${r.place}`} {r.name}</span>
-                  {r.payout>0&&<span style={{ color:'#4ade80' }}>+{formatEuro(r.payout)}</span>}
                 </div>
               ))}
-              <div style={{ fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'6px',textAlign:'right',fontFamily:'Cinzel,serif',letterSpacing:'0.06em' }}>Details ▶</div>
+              <div style={{ fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'6px',textAlign:'right',fontFamily:'Cinzel,serif' }}>Details ▶</div>
             </div>
           ))}
         </div>
       )}
 
       {/* ── RANKINGS ── */}
-      {view==='rankings' && (
+      {view === 'rankings' && (
         <div>
           {(() => {
-            const sm={}
-            tournaments.forEach(t => {
-              const pc=(t.players||[]).length
-              ;(t.results||[]).forEach(r => {
-                if(!sm[r.name])sm[r.name]={name:r.name,tournaments:0,wins:0,itm:0,earnings:0}
-                sm[r.name].tournaments++
-                if(r.place===1)sm[r.name].wins++
-                if(r.place<=Math.max(3,Math.floor(pc*0.33)))sm[r.name].itm++
-                if(r.payout)sm[r.name].earnings+=r.payout
-              })
+            const stats = {}
+            tournaments.flatMap(t=>t.results||[]).forEach(r => {
+              if (!stats[r.name]) stats[r.name]={name:r.name,wins:0,top3:0,played:0}
+              stats[r.name].played++
+              if (r.place===1) stats[r.name].wins++
+              if (r.place<=3) stats[r.name].top3++
             })
-            const ranked=Object.values(sm).sort((a,b)=>b.wins-a.wins||b.itm-a.itm)
-            if(ranked.length===0)return<div className="empty-state">Noch keine Daten ♠</div>
-            return ranked.map((p,i)=>(
-              <div key={p.name} className="card" style={{ marginBottom:'10px',padding:'14px 16px' }}>
-                <div style={{ display:'flex',alignItems:'center',gap:'12px' }}>
-                  <div style={{ fontSize:i<3?'1.3rem':'0.9rem',minWidth:'28px' }}>{i<3?['🥇','🥈','🥉'][i]:`#${i+1}`}</div>
-                  <Avatar name={p.name} avatars={avatars} size={36} />
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:600 }}>{p.name}</div>
-                    <div style={{ fontSize:'0.75rem',color:'var(--text-muted)' }}>{p.tournaments} Turniere · {p.wins} Siege · {p.itm}× ITM</div>
-                  </div>
-                  {p.earnings>0&&<div className="font-display profit-pos" style={{ fontSize:'0.9rem' }}>+{formatEuro(p.earnings)}</div>}
+            const sorted = Object.values(stats).sort((a,b)=>b.wins-a.wins||b.top3-a.top3)
+            if (sorted.length===0) return <div className="empty-state">Noch keine Turnier-Ergebnisse ♠</div>
+            return sorted.map((p,i) => (
+              <div key={p.name} className="card" style={{ marginBottom:'10px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'12px' }}>
+                <div style={{ fontSize:i<3?'1.4rem':'0.9rem',minWidth:'28px',textAlign:'center' }}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}</div>
+                <Avatar name={p.name} avatars={avatars} size={38} />
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:600 }}>{p.name}</div>
+                  <div style={{ fontSize:'0.72rem',color:'var(--text-muted)' }}>{p.wins}× 🥇 · {p.top3}× Top 3 · {p.played} Turniere</div>
                 </div>
               </div>
             ))
@@ -748,58 +669,31 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
         </div>
       )}
 
-      {/* Rebuy confirmation */}
-      {rebuyConfirm && (
-        <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.8)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:450,padding:'20px' }}
-          onClick={()=>setRebuyConfirm(null)}>
-          <div className="card" style={{ maxWidth:'320px',width:'100%',padding:'24px',textAlign:'center' }}
-            onClick={e=>e.stopPropagation()}>
-            <div style={{ fontSize:'2rem',marginBottom:'8px' }}>🔄</div>
-            <div className="font-display" style={{ fontSize:'0.9rem',color:'#f472b6',letterSpacing:'0.1em',marginBottom:'6px' }}>REBUY</div>
-            <div style={{ fontSize:'0.95rem',marginBottom:'6px' }}>{rebuyConfirm}</div>
-            <div style={{ fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'20px' }}>
-              +{tournament?.buyin}€ · {tournament?.chips?.toLocaleString()} Chips
-            </div>
-            <div style={{ display:'flex',gap:'10px' }}>
-              <button className="btn-ghost" style={{ flex:1 }} onClick={()=>setRebuyConfirm(null)}>Abbrechen</button>
-              <button className="btn-ghost" style={{ flex:1,borderColor:'rgba(244,114,182,0.5)',color:'#f472b6' }}
-                onClick={() => { addRebuy(rebuyConfirm); setRebuyConfirm(null) }}>✓ Bestätigen</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tournament detail modal */}
+      {/* ── Detail Modal ── */}
       {detailT && (
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:450,padding:'20px' }}
           onClick={()=>setDetailT(null)}>
-          <div className="card" style={{ maxWidth:'400px',width:'100%',padding:'24px',maxHeight:'85vh',overflowY:'auto' }}
-            onClick={e=>e.stopPropagation()}>
-            <div className="font-display" style={{ fontSize:'1rem',color:'var(--gold)',letterSpacing:'0.12em',marginBottom:'4px' }}>🎰 {detailT.name}</div>
+          <div className="card" style={{ maxWidth:'400px',width:'100%',padding:'24px',maxHeight:'85vh',overflowY:'auto' }} onClick={e=>e.stopPropagation()}>
+            <div className="font-display" style={{ fontSize:'1rem',color:'var(--gold)',marginBottom:'4px' }}>🎰 {detailT.name}</div>
             <div style={{ fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'20px' }}>{formatDate(detailT.date)}</div>
             <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'20px' }}>
-              {[
-                {label:'Spieler',value:(detailT.players||[]).length},
-                {label:'Buy-In',value:formatEuro(detailT.buyin)},
-                {label:'Pot',value:formatEuro((detailT.players||[]).length*detailT.buyin)},
-              ].map(s=>(
+              {[{label:'Spieler',value:(detailT.players||[]).length},{label:'Buy-In',value:formatEuro(detailT.buyin)},{label:'Pot',value:formatEuro((detailT.players||[]).length*detailT.buyin)}].map(s=>(
                 <div key={s.label} style={{ textAlign:'center',padding:'10px 8px',borderRadius:'8px',background:'rgba(0,0,0,0.2)',border:'1px solid rgba(255,255,255,0.06)' }}>
                   <div className="font-display" style={{ fontSize:'0.85rem',color:'var(--gold)' }}>{s.value}</div>
-                  <div style={{ fontSize:'0.6rem',color:'var(--text-muted)',marginTop:'2px',fontFamily:'Cinzel,serif' }}>{s.label}</div>
+                  <div style={{ fontSize:'0.6rem',color:'var(--text-muted)',marginTop:'2px' }}>{s.label}</div>
                 </div>
               ))}
             </div>
-            <div className="font-display" style={{ fontSize:'0.72rem',color:'var(--gold)',letterSpacing:'0.1em',marginBottom:'10px' }}>ENDERGEBNIS</div>
-            {[...(detailT.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).map(r=>{
-              const medal=r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':`#${r.place}`
-              return(
-                <div key={r.name} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'10px 12px',borderRadius:'8px',marginBottom:'6px',
-                  background:r.place<=3?'rgba(201,168,76,0.06)':'rgba(0,0,0,0.15)',
-                  border:`1px solid ${r.place===1?'rgba(201,168,76,0.3)':r.place<=3?'rgba(201,168,76,0.15)':'rgba(255,255,255,0.05)'}` }}>
+            <div className="font-display" style={{ fontSize:'0.72rem',color:'var(--gold)',marginBottom:'10px' }}>ENDERGEBNIS</div>
+            {[...(detailT.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).map(r => {
+              const medal = r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':`#${r.place}`
+              const prize = detailT.payouts?.[r.place-1] ? Math.round((detailT.players||[]).length*detailT.buyin*detailT.payouts[r.place-1].pct/100) : 0
+              return (
+                <div key={r.name} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'10px 12px',borderRadius:'8px',marginBottom:'6px',background:r.place<=3?'rgba(201,168,76,0.06)':'rgba(0,0,0,0.15)',border:`1px solid ${r.place===1?'rgba(201,168,76,0.3)':'rgba(255,255,255,0.05)'}` }}>
                   <span style={{ fontSize:'1.1rem' }}>{medal}</span>
                   <Avatar name={r.name} avatars={avatars} size={30} />
-                  <span style={{ flex:1,fontWeight:600,fontSize:'0.95rem' }}>{r.name}</span>
-                  {r.payout>0&&<span className="font-display profit-pos" style={{ fontSize:'0.9rem' }}>+{formatEuro(r.payout)}</span>}
+                  <span style={{ flex:1,fontWeight:600 }}>{r.name}</span>
+                  {prize>0 && <span className="font-display profit-pos">+{formatEuro(prize)}</span>}
                 </div>
               )
             })}
@@ -808,7 +702,25 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
         </div>
       )}
 
-      {confirm&&<ConfirmDialog title={confirm.title} text={confirm.text} okLabel="Löschen" onOk={confirm.onOk} onCancel={()=>setConfirm(null)} />}
+      {/* ── Rebuy Confirm ── */}
+      {rebuyConfirm && (
+        <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.8)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:450,padding:'20px' }}
+          onClick={()=>setRebuyConfirm(null)}>
+          <div className="card" style={{ maxWidth:'320px',width:'100%',padding:'24px',textAlign:'center' }} onClick={e=>e.stopPropagation()}>
+            <div style={{ fontSize:'2rem',marginBottom:'8px' }}>🔄</div>
+            <div className="font-display" style={{ fontSize:'0.9rem',color:'#f472b6',letterSpacing:'0.1em',marginBottom:'6px' }}>REBUY</div>
+            <div style={{ fontSize:'0.95rem',marginBottom:'6px' }}>{rebuyConfirm}</div>
+            <div style={{ fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'20px' }}>+{t?.buyin}€ · {t?.chips?.toLocaleString()} Chips</div>
+            <div style={{ display:'flex',gap:'10px' }}>
+              <button className="btn-ghost" style={{ flex:1 }} onClick={()=>setRebuyConfirm(null)}>Abbrechen</button>
+              <button className="btn-ghost" style={{ flex:1,borderColor:'rgba(244,114,182,0.5)',color:'#f472b6' }}
+                onClick={()=>{ addRebuy(rebuyConfirm); setRebuyConfirm(null) }}>✓ Bestätigen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirm && <ConfirmDialog {...confirm} onCancel={()=>setConfirm(null)} />}
     </div>
   )
 }
