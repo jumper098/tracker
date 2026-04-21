@@ -101,7 +101,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   }
 
   // ─── Apply tournament state ────────────────────────────────────────────────
-  function applyState(t, fromRemote = false) {
+  function applyState(t) {
     if (!t) return
     const lvl = typeof t.timerLevel === 'number' ? t.timerLevel : 0
     const rem = calcRemaining(t, lvl)
@@ -110,8 +110,6 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     setTimeLeft(rem)
     setPaused(t.timerPaused || false)
     pausedRef.current = t.timerPaused || false
-    setView('live')
-    // Always restart tick from DB state — calcRemaining handles the offset correctly
     startTick(t, lvl)
   }
 
@@ -119,7 +117,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   const justSynced = useRef(false)
   function syncDb(t) {
     justSynced.current = true
-    setTimeout(() => { justSynced.current = false }, 2000)
+    setTimeout(() => { justSynced.current = false }, 5000)
     db.from('live_tournament').upsert(
       { id: 'current', data: { tournament: t }, updated_at: new Date().toISOString() },
       { onConflict: 'id' }
@@ -131,27 +129,25 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     async function load() {
       try {
         const { data } = await db.from('live_tournament').select('data').eq('id', 'current').single()
-        if (data?.data?.tournament) applyState(data.data.tournament)
+        if (data?.data?.tournament) { applyState(data.data.tournament); setView('live') }
       } catch(e) {}
     }
     load()
 
     const ch = db.channel('live_t')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'live_tournament' }, p => {
-        if (justSynced.current) return // ignore our own updates
+        if (justSynced.current) return
         const t = p.new?.data?.tournament
         if (t) {
-          // Only update players/results from remote, keep local timer running
-          setTournament(prev => {
-            if (!prev) { applyState(t, true); return prev }
-            // If level changed remotely, do full applyState
-            if (t.timerLevel !== prev.timerLevel || t.timerPaused !== prev.timerPaused) {
-              applyState(t, true)
-              return prev
-            }
-            // Otherwise just update players/results
-            return { ...prev, players: t.players, results: t.results }
-          })
+          const lvl = typeof t.timerLevel === 'number' ? t.timerLevel : 0
+          const rem = calcRemaining(t, lvl)
+          setTournament(t)
+          setLevel(lvl)
+          setTimeLeft(rem)
+          setPaused(t.timerPaused || false)
+          pausedRef.current = t.timerPaused || false
+          setView('live')
+          startTick(t, lvl)
         } else {
           if (timerRef.current) clearInterval(timerRef.current)
           setTournament(null)
@@ -196,6 +192,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       timerPaused: false,
     }
     applyState(t)
+    setView('live')
     syncDb(t)
   }
 
