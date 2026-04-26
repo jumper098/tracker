@@ -896,23 +896,43 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       {view === 'history' && (
         <div>
           {tournaments.length===0 && <div className="empty-state">Noch keine Turniere ♠</div>}
-          {[...tournaments].sort((a,b)=>b.date?.localeCompare(a.date)).map(ht => (
-            <div key={ht.id} className="card" style={{ marginBottom:'12px',padding:'16px',cursor:'pointer' }} onClick={()=>setDetailT(ht)}>
-              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px' }}>
-                <div>
-                  <div className="font-display" style={{ fontSize:'0.85rem',color:'var(--gold)' }}>{ht.name}</div>
-                  <div style={{ fontSize:'0.78rem',color:'var(--text-muted)' }}>{formatDate(ht.date)} · {(ht.players||[]).length} Spieler · {formatEuro(ht.buyin)} Buy-In</div>
+          {[...tournaments].sort((a,b)=>b.date?.localeCompare(a.date)).map(ht => {
+            const top3 = [...(ht.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).slice(0,3)
+            const photo = tourneyPhotos[ht.id]
+            return (
+              <div key={ht.id} className="card" style={{ marginBottom:'12px',padding:'16px',cursor:'pointer' }} onClick={()=>setDetailT(ht)}>
+                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'10px' }}>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div className="font-display" style={{ fontSize:'0.85rem',color:'var(--gold)' }}>{ht.name}</div>
+                    <div style={{ fontSize:'0.78rem',color:'var(--text-muted)' }}>{formatDate(ht.date)} · {(ht.players||[]).length} Spieler · {formatEuro(ht.buyin)} Buy-In</div>
+                  </div>
+                  <button className="btn-danger" style={{ flexShrink:0,marginLeft:'8px' }} onClick={e=>{e.stopPropagation();deleteTournament(ht.id)}}>✕</button>
                 </div>
-                <button className="btn-danger" onClick={e=>{e.stopPropagation();deleteTournament(ht.id)}}>✕</button>
+
+                <div style={{ display:'flex',gap:'10px',alignItems:'stretch' }}>
+                  {/* Top 3 with avatars */}
+                  <div style={{ flex:1,display:'flex',flexDirection:'column',gap:'5px' }}>
+                    {top3.map(r => (
+                      <div key={r.name} style={{ display:'flex',alignItems:'center',gap:'7px',fontSize:'0.85rem' }}>
+                        <span style={{ minWidth:'20px' }}>{r.place===1?'🥇':r.place===2?'🥈':'🥉'}</span>
+                        <Avatar name={r.name} avatars={avatars} size={24} />
+                        <span style={{ overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{r.name}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Photo thumbnail */}
+                  {photo && (
+                    <div style={{ flexShrink:0,width:'80px',borderRadius:'8px',overflow:'hidden',border:'1px solid rgba(201,168,76,0.2)' }}>
+                      <img src={photo} alt={ht.name} style={{ width:'100%',height:'100%',objectFit:'cover',display:'block' }} />
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'8px',textAlign:'right',fontFamily:'Cinzel,serif' }}>Details ▶</div>
               </div>
-              {[...(ht.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).slice(0,3).map(r => (
-                <div key={r.name} style={{ display:'flex',justifyContent:'space-between',fontSize:'0.85rem',padding:'4px 0' }}>
-                  <span>{r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':`#${r.place}`} {r.name}</span>
-                </div>
-              ))}
-              <div style={{ fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'6px',textAlign:'right',fontFamily:'Cinzel,serif' }}>Details ▶</div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
