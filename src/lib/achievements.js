@@ -198,6 +198,18 @@ export const ACHIEVEMENTS = [
     holders: (stats, all) => [...new Set(all.filter(s => s.buy_in > 0 && Math.abs(s.cash_out - s.buy_in) < 0.01).map(s => s.player_name))],
   },
   {
+    id: 'tourney_itm1', icon: '💵', name: 'IN THE MONEY',
+    desc: 'Einmal bei einem Turnier ins Geld gekommen',
+    holders: (stats, all, tours) => {
+      const winners = new Set()
+      ;(tours||[]).forEach(t => {
+        const payoutPlaces = (t.payouts||[]).filter(p=>p.pct>0).length || Math.max(1, Math.floor((t.players||[]).length * 0.33))
+        ;(t.results||[]).forEach(r => { if ((r.place||99) <= payoutPlaces) winners.add(r.name) })
+      })
+      return [...winners]
+    },
+  },
+  {
     id: 'tourney_winner', icon: '🎰', name: 'TOURNAMENT WINNER',
     desc: 'Ein Turnier gewonnen',
     holders: (stats, all, tours) => {
@@ -207,24 +219,24 @@ export const ACHIEVEMENTS = [
     },
   },
   {
-    id: 'tourney_itm5', icon: '💵', name: 'IN THE MONEY',
-    desc: '5× in einem Turnier ins Geld gekommen',
+    id: 'tourney_itm5', icon: '💰', name: 'MONEY MAKER',
+    desc: '5× bei Turnieren ins Geld gekommen',
     holders: (stats, all, tours) => {
       const counts = {}
       ;(tours||[]).forEach(t => {
-        const itmCutoff = Math.max(3, Math.floor((t.players||[]).length * 0.33))
-        ;(t.results||[]).forEach(r => { if ((r.place||99) <= itmCutoff) counts[r.name] = (counts[r.name]||0) + 1 })
+        const payoutPlaces = (t.payouts||[]).filter(p=>p.pct>0).length || Math.max(1, Math.floor((t.players||[]).length * 0.33))
+        ;(t.results||[]).forEach(r => { if ((r.place||99) <= payoutPlaces) counts[r.name] = (counts[r.name]||0) + 1 })
       })
       return Object.entries(counts).filter(([,c])=>c>=5).map(([n])=>n)
     },
   },
   {
-    id: 'tourney_5wins', icon: '🏆', name: 'POKER CHAMPION',
-    desc: '5 Turniere gewonnen',
+    id: 'tourney_3wins', icon: '🏆', name: 'POKER CHAMPION',
+    desc: '3 Turniere gewonnen',
     holders: (stats, all, tours) => {
       const counts = {}
       ;(tours||[]).forEach(t => { const w = (t.results||[]).find(r=>r.place===1); if (w) counts[w.name]=(counts[w.name]||0)+1 })
-      return Object.entries(counts).filter(([,c])=>c>=5).map(([n])=>n)
+      return Object.entries(counts).filter(([,c])=>c>=3).map(([n])=>n)
     },
   },
   {

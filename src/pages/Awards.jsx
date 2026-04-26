@@ -4,9 +4,9 @@ import { ACHIEVEMENTS } from '../lib/achievements'
 
 const TIERS = [
   { level: 1, label: '🥉 EINSTEIGER', cls: 'tier-1', ids: ['first_win','iron_wallet','veteran','nit','punktlandung'] },
-  { level: 2, label: '🥈 FORTGESCHRITTEN', cls: 'tier-2', ids: ['comeback','night_owl','unzerstoerbar','bad_beat','daylight_robbery','tourney_winner'] },
-  { level: 3, label: '🥇 EXPERTE', cls: 'tier-3', ids: ['big_winner','profit_king','rebuy_king','collector_80','iron_man','legend','hat_trick','tourney_itm5'] },
-  { level: 4, label: '💎 LEGENDE', cls: 'tier-4', ids: ['collector_100','profit_emperor','tourney_5wins'] },
+  { level: 2, label: '🥈 FORTGESCHRITTEN', cls: 'tier-2', ids: ['comeback','night_owl','unzerstoerbar','bad_beat','daylight_robbery','tourney_itm1'] },
+  { level: 3, label: '🥇 EXPERTE', cls: 'tier-3', ids: ['big_winner','profit_king','rebuy_king','collector_80','iron_man','legend','hat_trick','tourney_winner','tourney_itm5'] },
+  { level: 4, label: '💎 LEGENDE', cls: 'tier-4', ids: ['collector_100','profit_emperor','tourney_3wins'] },
 ]
 
 const TIER_COLORS = {
