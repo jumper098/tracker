@@ -285,16 +285,19 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
 
   async function endTournament() {
     if (!t) return
+    const snapshot = { ...t }
+    // Clear immediately to prevent double-trigger
+    tRef.current = null
+    setT(null)
+    setView('create')
+    if (timerRef.current) clearInterval(timerRef.current)
     const { error } = await db.from('poker_tournaments').insert([{
       id: crypto.randomUUID(),
-      name: t.name, date: t.date, buyin: t.buyin,
-      players: t.players, results: t.results, payouts: t.payouts,
+      name: snapshot.name, date: snapshot.date, buyin: snapshot.buyin,
+      players: snapshot.players, results: snapshot.results, payouts: snapshot.payouts,
     }])
     if (error) { showToast('Fehler: ' + error.message); return }
     await db.from('live_tournament').delete().eq('id', 'current')
-    if (timerRef.current) clearInterval(timerRef.current)
-    setT(null) // view auto-switches to create since t is null
-    setView('create')
     onRefresh()
     showToast('✓ Turnier gespeichert!')
   }
