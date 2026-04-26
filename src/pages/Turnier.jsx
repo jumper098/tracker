@@ -218,7 +218,14 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     const totalSecs = (prev.blinds[lvl]?.duration || 20) * 60
     let updated
     if (prev.timerPaused) {
-      updated = { ...prev, timerPaused: false, timerStartedAt: Date.now() }
+      // Bake the already-elapsed seconds INTO timerStartedAt.
+      // calcRemaining does: totalSecs - timerElapsed - (Date.now() - timerStartedAt)/1000
+      // We set timerElapsed=0 and timerStartedAt = Date.now() - prevElapsed*1000
+      // So: totalSecs - 0 - (Date.now() - (Date.now() - prevElapsed*1000))/1000
+      //   = totalSecs - prevElapsed  ✓
+      // Any device receiving this later: Date.now() is also later by the same delta → still correct ✓
+      const prevElapsed = prev.timerElapsed || 0
+      updated = { ...prev, timerPaused: false, timerElapsed: 0, timerStartedAt: Date.now() - prevElapsed * 1000 }
       setT(updated)
       startTimer(updated)
     } else {
