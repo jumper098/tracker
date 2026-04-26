@@ -261,6 +261,19 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     writeDb(newT)
   }
 
+  function adjustTimer(seconds) {
+    const cur = tRef.current
+    if (!cur) return
+    // Shift timerStartedAt forward/backward to add/remove seconds
+    // +30s means more time → shift startedAt forward (later) so elapsed is less
+    // -30s means less time → shift startedAt backward (earlier) so elapsed is more
+    const updated = { ...cur, timerStartedAt: (cur.timerStartedAt || Date.now()) - seconds * 1000 }
+    tRef.current = updated
+    setT(updated)
+    setTimeLeft(calcRemaining(updated))
+    setTimeout(() => writeDb(updated), 0)
+  }
+
   function toggleTimer() {
     const prev = tRef.current
     if (!prev) return
@@ -749,7 +762,11 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
               <>
                 <div style={{ textAlign:'center', padding:'18px 16px 10px' }}>
                   <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.55rem', color:'var(--text-muted)', letterSpacing:'0.18em', marginBottom:'4px' }}>LEVEL {realLevelNum}</div>
-                  <div style={{ fontFamily:'Cinzel,serif', fontSize:'5rem', color:timerColor, lineHeight:1, letterSpacing:'0.05em' }}>{timerMin}:{timerSec}</div>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px' }}>
+                    <button onClick={()=>adjustTimer(-30)} style={{ padding:'6px 10px', borderRadius:'7px', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.05)', color:'var(--text-muted)', fontFamily:'Cinzel,serif', fontSize:'0.65rem', cursor:'pointer' }}>−30s</button>
+                    <div style={{ fontFamily:'Cinzel,serif', fontSize:'5rem', color:timerColor, lineHeight:1, letterSpacing:'0.05em' }}>{timerMin}:{timerSec}</div>
+                    <button onClick={()=>adjustTimer(30)} style={{ padding:'6px 10px', borderRadius:'7px', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.05)', color:'var(--text-muted)', fontFamily:'Cinzel,serif', fontSize:'0.65rem', cursor:'pointer' }}>+30s</button>
+                  </div>
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1px 1fr 1px 1fr', background:'rgba(201,168,76,0.06)', borderTop:'1px solid rgba(201,168,76,0.2)' }}>
                   {[
