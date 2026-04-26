@@ -888,32 +888,20 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
         <div>
           {tournaments.length===0 && <div className="empty-state">Noch keine Turniere ♠</div>}
           {[...tournaments].sort((a,b)=>b.date?.localeCompare(a.date)).map(ht => (
-            <div key={ht.id} className="card" style={{ marginBottom:'12px',padding:'0',cursor:'pointer',overflow:'hidden' }} onClick={()=>setDetailT(ht)}>
-              {/* Photo banner if exists */}
-              {tourneyPhotos[ht.id] && (
-                <div style={{ position:'relative',height:'120px',overflow:'hidden' }}>
-                  <img src={tourneyPhotos[ht.id]} alt={ht.name} style={{ width:'100%',height:'100%',objectFit:'cover' }} />
-                  <div style={{ position:'absolute',inset:0,background:'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.8))' }} />
-                  <div className="font-display" style={{ position:'absolute',bottom:'10px',left:'14px',fontSize:'0.85rem',color:'var(--gold)' }}>{ht.name}</div>
-                </div>
-              )}
-              <div style={{ padding:'14px 16px' }}>
-                {!tourneyPhotos[ht.id] && (
-                  <div className="font-display" style={{ fontSize:'0.85rem',color:'var(--gold)',marginBottom:'4px' }}>{ht.name}</div>
-                )}
-                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px' }}>
+            <div key={ht.id} className="card" style={{ marginBottom:'12px',padding:'16px',cursor:'pointer' }} onClick={()=>setDetailT(ht)}>
+              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'8px' }}>
+                <div>
+                  <div className="font-display" style={{ fontSize:'0.85rem',color:'var(--gold)' }}>{ht.name}</div>
                   <div style={{ fontSize:'0.78rem',color:'var(--text-muted)' }}>{formatDate(ht.date)} · {(ht.players||[]).length} Spieler · {formatEuro(ht.buyin)} Buy-In</div>
-                  <button className="btn-danger" onClick={e=>{e.stopPropagation();deleteTournament(ht.id)}}>✕</button>
                 </div>
-                {[...(ht.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).slice(0,3).map(r => (
-                  <div key={r.name} style={{ display:'flex',justifyContent:'space-between',fontSize:'0.85rem',padding:'4px 0' }}>
-                    <span>{r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':`#${r.place}`} {r.name}</span>
-                  </div>
-                ))}
-                <div style={{ fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'6px',textAlign:'right',fontFamily:'Cinzel,serif' }}>
-                  {tourneyPhotos[ht.id] ? '📷 ' : ''}Details ▶
-                </div>
+                <button className="btn-danger" onClick={e=>{e.stopPropagation();deleteTournament(ht.id)}}>✕</button>
               </div>
+              {[...(ht.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).slice(0,3).map(r => (
+                <div key={r.name} style={{ display:'flex',justifyContent:'space-between',fontSize:'0.85rem',padding:'4px 0' }}>
+                  <span>{r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':`#${r.place}`} {r.name}</span>
+                </div>
+              ))}
+              <div style={{ fontSize:'0.7rem',color:'var(--text-muted)',marginTop:'6px',textAlign:'right',fontFamily:'Cinzel,serif' }}>Details ▶</div>
             </div>
           ))}
         </div>
@@ -1082,6 +1070,32 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                     ))}
                   </div>
 
+                  {/* Photo */}
+                  {(() => {
+                    const photoUrl = tourneyPhotos[detailT.id]
+                    return (
+                      <div style={{ marginBottom:'20px' }}>
+                        {photoUrl ? (
+                          <div style={{ position:'relative',borderRadius:'12px',overflow:'hidden' }}>
+                            <img src={photoUrl} alt={detailT.name} onClick={()=>setLightbox(photoUrl)}
+                              style={{ width:'100%',maxHeight:'200px',objectFit:'cover',cursor:'pointer',display:'block' }} />
+                            <button onClick={()=>removeTourneyPhoto(detailT.id)}
+                              style={{ position:'absolute',top:'8px',right:'8px',background:'rgba(0,0,0,0.7)',border:'1px solid rgba(248,113,113,0.5)',color:'#f87171',borderRadius:'6px',padding:'4px 10px',fontSize:'0.7rem',cursor:'pointer',fontFamily:'Cinzel,serif' }}>
+                              🗑 Entfernen
+                            </button>
+                          </div>
+                        ) : (
+                          <label style={{ display:'block',border:'2px dashed rgba(201,168,76,0.25)',borderRadius:'12px',padding:'16px',textAlign:'center',cursor:'pointer',background:'rgba(201,168,76,0.03)' }}>
+                            <div style={{ fontSize:'1.5rem',marginBottom:'4px' }}>📷</div>
+                            <div style={{ fontFamily:'Cinzel,serif',fontSize:'0.65rem',color:'var(--text-muted)',letterSpacing:'0.1em' }}>FOTO HINZUFÜGEN</div>
+                            <input type="file" accept="image/*" style={{ display:'none' }}
+                              onChange={e=>handleTourneyPhotoUpload(e, detailT.id)} />
+                          </label>
+                        )}
+                      </div>
+                    )
+                  })()}
+
                   {/* Payouts */}
                   {(detailT.payouts||[]).some(p=>p.pct>0) && (
                     <>
@@ -1138,33 +1152,6 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                     </>
                   )}
                 </>
-              )
-            })()}
-
-            {/* Photo section */}
-            {(() => {
-              const photoUrl = tourneyPhotos[detailT.id]
-              return (
-                <div style={{ marginTop:'20px' }}>
-                  <div className="font-display" style={{ fontSize:'0.72rem',color:'var(--gold)',marginBottom:'10px' }}>FOTO</div>
-                  {photoUrl ? (
-                    <div style={{ position:'relative',borderRadius:'12px',overflow:'hidden',marginBottom:'8px' }}>
-                      <img src={photoUrl} alt={detailT.name} onClick={()=>setLightbox(photoUrl)}
-                        style={{ width:'100%',maxHeight:'220px',objectFit:'cover',cursor:'pointer',display:'block' }} />
-                      <button onClick={()=>removeTourneyPhoto(detailT.id)}
-                        style={{ position:'absolute',top:'8px',right:'8px',background:'rgba(0,0,0,0.7)',border:'1px solid rgba(248,113,113,0.5)',color:'#f87171',borderRadius:'6px',padding:'4px 10px',fontSize:'0.7rem',cursor:'pointer',fontFamily:'Cinzel,serif' }}>
-                        🗑 Entfernen
-                      </button>
-                    </div>
-                  ) : (
-                    <label style={{ display:'block',border:'2px dashed rgba(201,168,76,0.25)',borderRadius:'12px',padding:'20px',textAlign:'center',cursor:'pointer',background:'rgba(201,168,76,0.03)' }}>
-                      <div style={{ fontSize:'1.8rem',marginBottom:'6px' }}>📷</div>
-                      <div style={{ fontFamily:'Cinzel,serif',fontSize:'0.7rem',color:'var(--text-muted)',letterSpacing:'0.1em' }}>FOTO HINZUFÜGEN</div>
-                      <input type="file" accept="image/*" style={{ display:'none' }}
-                        onChange={e=>handleTourneyPhotoUpload(e, detailT.id)} />
-                    </label>
-                  )}
-                </div>
               )
             })()}
 
