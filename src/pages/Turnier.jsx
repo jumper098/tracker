@@ -73,7 +73,19 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
 
   // Keep tRef current
   useEffect(() => { tRef.current = t }, [t])
-  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
+  useEffect(() => () => {
+    if (timerRef.current) clearInterval(timerRef.current)
+    // When leaving the tab, save paused state to Supabase
+    const cur = tRef.current
+    if (cur && !cur.timerPaused) {
+      const lvl = cur.timerLevel || 0
+      const totalSecs = (cur.blinds[lvl]?.duration || 20) * 60
+      const elapsed = totalSecs - calcRemaining(cur)
+      const paused = { ...cur, timerPaused: true, timerElapsed: elapsed, timerStartedAt: null }
+      tRef.current = paused
+      writeDb(paused)
+    }
+  }, [])
 
   // ── Timer ─────────────────────────────────────────────────────────────────
   function startTimer(tournament) {
@@ -137,6 +149,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
           }
           tRef.current = tournament   // set ref BEFORE startTimer reads it
           setT(tournament)
+          setView('live')
           setTimeLeft(calcRemaining(tournament))
         }
       }).catch(() => {})
@@ -192,8 +205,8 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     }
     setT(newT)
     startTimer(newT)
+    setView('live')
     writeDb(newT)
-    // view derives from t automatically
   }
 
   function toggleTimer() {
@@ -320,8 +333,8 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
         <div className="font-display" style={{ fontSize:'1.3rem', color:'var(--gold)', letterSpacing:'0.15em' }}>♠ TURNIER</div>
       </div>
 
-      {/* Sub nav — only when no active tournament */}
-      {!t && (
+      {/* Sub nav — always visible except during live view */}
+      {view !== 'live' && (
         <div style={{ display:'flex', gap:'6px', marginBottom:'20px' }}>
           {[
             ...(t ? [{id:'live',label:'🔴 Live'}] : []),
@@ -485,8 +498,24 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
         </div>
       )}
 
+      {/* ── RESUME BANNER — shown when tournament is running but user is in overview ── */}
+      {t && view !== 'live' && (
+        <div style={{ marginBottom:'16px', padding:'14px 16px', borderRadius:'12px', background:'rgba(74,222,128,0.08)', border:'1px solid rgba(74,222,128,0.3)', display:'flex', alignItems:'center', gap:'12px' }}>
+          <div style={{ fontSize:'1.2rem' }}>🔴</div>
+          <div style={{ flex:1 }}>
+            <div className="font-display" style={{ fontSize:'0.75rem', color:'#4ade80', letterSpacing:'0.1em' }}>{t.name}</div>
+            <div style={{ fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'2px' }}>
+              Level {realLevelNum} · {activePlayers} im Spiel · {totalPot}€ Pot
+            </div>
+          </div>
+          <button onClick={()=>setView('live')} style={{ padding:'9px 16px', borderRadius:'8px', border:'1px solid rgba(74,222,128,0.5)', background:'rgba(74,222,128,0.15)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.7rem', letterSpacing:'0.08em', cursor:'pointer', flexShrink:0 }}>
+            ▶ FORTSETZEN
+          </button>
+        </div>
+      )}
+
       {/* ── LIVE ── */}
-      {t && (
+      {t && view === 'live' && (
         <div>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', padding:'8px 12px', borderRadius:'8px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
             <span className="font-display" style={{ fontSize:'0.7rem', color:'var(--gold-light)' }}>{t.name}</span>
@@ -625,7 +654,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
           )}
 
           <div style={{ display:'flex', gap:'10px' }}>
-            <button className="btn-ghost" style={{ flex:1 }} onClick={()=>setView('create')}>← Zurück</button>
+            <button className="btn-ghost" style={{ flex:1 }} onClick={()=>setView('create')}>← Übersicht</button>
             <button style={{ flex:1,background:'rgba(192,57,43,0.1)',color:'#e74c3c',border:'1px solid rgba(192,57,43,0.35)',borderRadius:'10px',padding:'13px',fontFamily:'Cinzel,serif',fontSize:'0.72rem',letterSpacing:'0.1em',cursor:'pointer' }}
               onClick={()=>setConfirm({title:'✕ Turnier beenden?',text:'Turnier speichern und beenden?',onOk:()=>{setConfirm(null);endTournament()}})}>
               ✕ Beenden & Speichern
@@ -635,7 +664,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       )}
 
       {/* ── HISTORY ── */}
-      {!t && view === 'history' && (
+      {view === 'history' && (
         <div>
           {tournaments.length===0 && <div className="empty-state">Noch keine Turniere ♠</div>}
           {[...tournaments].sort((a,b)=>b.date?.localeCompare(a.date)).map(ht => (
@@ -659,7 +688,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       )}
 
       {/* ── RANKINGS ── */}
-      {!t && view === 'rankings' && (
+      {view === 'rankings' && (
         <div>
           {(() => {
             const stats = {}
