@@ -116,7 +116,8 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     setT(prev => {
       if (!prev) return prev
       const updated = typeof updater === 'function' ? updater(prev) : updater
-      writeDb(updated)
+      // writeDb must NOT be called inside setState — schedule it outside
+      setTimeout(() => writeDb(updated), 0)
       return updated
     })
   }
@@ -217,18 +218,28 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   }
 
   function addRebuy(name) {
-    updateT(prev => ({
-      ...prev,
-      players: prev.players.map(p => p.name === name ? { ...p, rebuys: (p.rebuys||0)+1, eliminated: false, place: null } : p)
-    }))
+    setT(prev => {
+      if (!prev) return prev
+      const updated = {
+        ...prev,
+        players: prev.players.map(p => p.name === name ? { ...p, rebuys: (p.rebuys||0)+1, eliminated: false, place: null } : p)
+      }
+      setTimeout(() => writeDb(updated), 0)
+      return updated
+    })
     showToast(`↺ Rebuy für ${name}`)
   }
 
   function removeRebuy(name) {
-    updateT(prev => ({
-      ...prev,
-      players: prev.players.map(p => p.name === name && (p.rebuys||0) > 0 ? { ...p, rebuys: p.rebuys-1 } : p)
-    }))
+    setT(prev => {
+      if (!prev) return prev
+      const updated = {
+        ...prev,
+        players: prev.players.map(p => p.name === name && (p.rebuys||0) > 0 ? { ...p, rebuys: p.rebuys-1 } : p)
+      }
+      setTimeout(() => writeDb(updated), 0)
+      return updated
+    })
   }
 
   function eliminatePlayer(name) {
