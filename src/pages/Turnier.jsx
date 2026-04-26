@@ -121,10 +121,24 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
 
   async function writeDb(tournament) {
     try {
-      await db.from('live_tournament').upsert(
-        { id: 'current', data: { tournament, writerId: myId.current }, updated_at: new Date().toISOString() },
+      const serverNow = new Date().toISOString()
+      const { data } = await db.from('live_tournament').upsert(
+        { id: 'current', data: { tournament, writerId: myId.current }, updated_at: serverNow },
         { onConflict: 'id' }
-      )
+      ).select('updated_at').single()
+      // If tournament is running, correct timerStartedAt using the real server time
+      // This eliminates clock skew between devices
+      if (data?.updated_at && !tournament.timerPaused && tournament.timerStartedAt) {
+        const serverTs = new Date(data.updated_at).getTime()
+        const localTs = Date.now()
+        const skew = localTs - serverTs // positive = local clock is ahead
+        if (Math.abs(skew) > 500) {
+          // Correct the stored timerStartedAt by the skew
+          const corrected = { ...tournament, timerStartedAt: tournament.timerStartedAt + skew }
+          tRef.current = corrected
+          setT(corrected)
+        }
+      }
     } catch (_) {}
   }
 
@@ -140,15 +154,22 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   // ── Realtime + initial load ───────────────────────────────────────────────
   useEffect(() => {
     // Load existing tournament on mount
-    db.from('live_tournament').select('data').eq('id', 'current').single()
+    db.from('live_tournament').select('data, updated_at').eq('id', 'current').single()
       .then(({ data }) => {
         if (data?.data?.tournament) {
-          const tournament = data.data.tournament
+          let tournament = data.data.tournament
+          // Correct for clock skew using the server's updated_at timestamp
+          if (!tournament.timerPaused && tournament.timerStartedAt && data.updated_at) {
+            const serverTs = new Date(data.updated_at).getTime()
+            const localTs = Date.now()
+            const skew = localTs - serverTs
+            if (Math.abs(skew) > 500) {
+              tournament = { ...tournament, timerStartedAt: tournament.timerStartedAt + skew }
+            }
+          }
           tRef.current = tournament
           setT(tournament)
           setView('live')
-          // If tournament is running, start the timer from the correct position
-          // calcRemaining uses timerStartedAt so it's always in sync with other devices
           startTimer(tournament)
         }
       }).catch(() => {})
