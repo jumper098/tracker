@@ -129,8 +129,8 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
         if (data?.data?.tournament) {
           const tournament = data.data.tournament
           setT(tournament)
-          setView('live')
           startTimer(tournament)
+          // view auto-derives from t
         }
       }).catch(() => {})
 
@@ -150,7 +150,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
             }
             return tournament
           })
-          setView('live')
+          // view derives from t — no setView needed
         } else {
           if (timerRef.current) clearInterval(timerRef.current)
           setT(null)
@@ -184,9 +184,9 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       timerPaused: false,
     }
     setT(newT)
-    setView('live')
     startTimer(newT)
     writeDb(newT)
+    // view derives from t automatically
   }
 
   function toggleTimer() {
@@ -264,7 +264,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     if (error) { showToast('Fehler: ' + error.message); return }
     await db.from('live_tournament').delete().eq('id', 'current')
     if (timerRef.current) clearInterval(timerRef.current)
-    setT(null)
+    setT(null) // view auto-switches to create since t is null
     setView('create')
     onRefresh()
     showToast('✓ Turnier gespeichert!')
@@ -304,8 +304,8 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
         <div className="font-display" style={{ fontSize:'1.3rem', color:'var(--gold)', letterSpacing:'0.15em' }}>♠ TURNIER</div>
       </div>
 
-      {/* Sub nav */}
-      {view !== 'live' && (
+      {/* Sub nav — only when no active tournament */}
+      {!t && (
         <div style={{ display:'flex', gap:'6px', marginBottom:'20px' }}>
           {[
             ...(t ? [{id:'live',label:'🔴 Live'}] : []),
@@ -325,7 +325,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       )}
 
       {/* ── CREATE ── */}
-      {view === 'create' && (
+      {!t && view === 'create' && (
         <div>
           <div className="card" style={{ marginBottom:'14px' }}>
             <div style={{ marginBottom:'12px' }}>
@@ -470,7 +470,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       )}
 
       {/* ── LIVE ── */}
-      {view === 'live' && t && (
+      {t && (
         <div>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', padding:'8px 12px', borderRadius:'8px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
             <span className="font-display" style={{ fontSize:'0.7rem', color:'var(--gold-light)' }}>{t.name}</span>
@@ -619,7 +619,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       )}
 
       {/* ── HISTORY ── */}
-      {view === 'history' && (
+      {!t && view === 'history' && (
         <div>
           {tournaments.length===0 && <div className="empty-state">Noch keine Turniere ♠</div>}
           {[...tournaments].sort((a,b)=>b.date?.localeCompare(a.date)).map(ht => (
@@ -643,7 +643,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       )}
 
       {/* ── RANKINGS ── */}
-      {view === 'rankings' && (
+      {!t && view === 'rankings' && (
         <div>
           {(() => {
             const stats = {}
