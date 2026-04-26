@@ -105,11 +105,13 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   // Each client has a unique ID — we embed it in writes to ignore our own echoes
   const myId = useRef(Math.random().toString(36).slice(2))
 
-  function writeDb(tournament) {
-    db.from('live_tournament').upsert(
-      { id: 'current', data: { tournament, writerId: myId.current }, updated_at: new Date().toISOString() },
-      { onConflict: 'id' }
-    ).catch(() => {})
+  async function writeDb(tournament) {
+    try {
+      await db.from('live_tournament').upsert(
+        { id: 'current', data: { tournament, writerId: myId.current }, updated_at: new Date().toISOString() },
+        { onConflict: 'id' }
+      )
+    } catch (_) {}
   }
 
   function updateT(updater) {
