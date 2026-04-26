@@ -70,6 +70,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   const [confirm, setConfirm] = useState(null)
   const [detailT, setDetailT] = useState(null)
   const [rebuyConfirm, setRebuyConfirm] = useState(null)
+  const [expandedPlayer, setExpandedPlayer] = useState(null)
 
   // Keep tRef current
   useEffect(() => { tRef.current = t }, [t])
@@ -697,35 +698,119 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
             const stats = {}
             tournaments.forEach(ht => {
               const payoutPlaces = (ht.payouts||[]).filter(p=>p.pct>0).length
+              const totalRebuys = (ht.players||[]).reduce((s,p)=>s+(p.rebuys||0),0)
+              const realPot = ((ht.players||[]).length + totalRebuys) * ht.buyin
               ;(ht.results||[]).forEach(r => {
-                if (!stats[r.name]) stats[r.name]={name:r.name,wins:0,second:0,third:0,itm:0,played:0}
-                stats[r.name].played++
-                if (r.place===1) stats[r.name].wins++
-                if (r.place===2) stats[r.name].second++
-                if (r.place===3) stats[r.name].third++
-                if (r.place<=payoutPlaces) stats[r.name].itm++
+                if (!stats[r.name]) stats[r.name]={name:r.name,wins:0,second:0,third:0,itm:0,played:0,rebuys:0,prizeMoney:0,bestPlace:Infinity,tournaments:[]}
+                const s = stats[r.name]
+                s.played++
+                if (r.place===1) s.wins++
+                if (r.place===2) s.second++
+                if (r.place===3) s.third++
+                if (r.place<=payoutPlaces) s.itm++
+                if (r.place<s.bestPlace) s.bestPlace=r.place
+                const playerData = (ht.players||[]).find(p=>p.name===r.name)
+                s.rebuys += playerData?.rebuys||0
+                const prize = r.place<=payoutPlaces && ht.payouts?.[r.place-1]
+                  ? Math.round(realPot*ht.payouts[r.place-1].pct/100) : 0
+                s.prizeMoney += prize
+                s.tournaments.push({ name:ht.name, date:ht.date, place:r.place, prize, rebuys:playerData?.rebuys||0, buyin:ht.buyin })
               })
             })
             const sorted = Object.values(stats).sort((a,b)=>
               b.wins-a.wins || b.itm-a.itm || b.second-a.second || b.third-a.third || b.played-a.played
             )
             if (sorted.length===0) return <div className="empty-state">Noch keine Turnier-Ergebnisse ♠</div>
-            return sorted.map((p,i) => (
-              <div key={p.name} className="card" style={{ marginBottom:'10px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'12px' }}>
-                <div style={{ fontSize:i<3?'1.4rem':'0.9rem',minWidth:'28px',textAlign:'center' }}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}</div>
-                <Avatar name={p.name} avatars={avatars} size={38} />
-                <div style={{ flex:1 }}>
-                  <div style={{ fontWeight:600,marginBottom:'4px' }}>{p.name}</div>
-                  <div style={{ display:'flex',gap:'8px',flexWrap:'wrap' }}>
-                    <span style={{ fontSize:'0.7rem',color:'#C9A84C',background:'rgba(201,168,76,0.1)',border:'1px solid rgba(201,168,76,0.25)',borderRadius:'5px',padding:'1px 6px' }}>🥇 {p.wins}×</span>
-                    <span style={{ fontSize:'0.7rem',color:'#a78bfa',background:'rgba(167,139,250,0.1)',border:'1px solid rgba(167,139,250,0.25)',borderRadius:'5px',padding:'1px 6px' }}>🥈 {p.second}×</span>
-                    <span style={{ fontSize:'0.7rem',color:'#fb923c',background:'rgba(251,146,60,0.1)',border:'1px solid rgba(251,146,60,0.25)',borderRadius:'5px',padding:'1px 6px' }}>🥉 {p.third}×</span>
-                    <span style={{ fontSize:'0.7rem',color:'#4ade80',background:'rgba(74,222,128,0.1)',border:'1px solid rgba(74,222,128,0.25)',borderRadius:'5px',padding:'1px 6px' }}>💰 {p.itm}×</span>
-                    <span style={{ fontSize:'0.7rem',color:'var(--text-muted)',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'5px',padding:'1px 6px' }}>🎰 {p.played}</span>
+            return sorted.map((p,i) => {
+              const itmPct = p.played>0 ? Math.round(p.itm/p.played*100) : 0
+              const isOpen = expandedPlayer === p.name
+              return (
+                <div key={p.name} className="card" style={{ marginBottom:'10px',padding:'0',cursor:'pointer' }}
+                  onClick={()=>setExpandedPlayer(isOpen ? null : p.name)}>
+
+                  {/* Always visible row */}
+                  <div style={{ display:'flex',alignItems:'center',gap:'12px',padding:'14px 16px' }}>
+                    <div style={{ fontSize:i<3?'1.4rem':'0.9rem',minWidth:'28px',textAlign:'center',flexShrink:0 }}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}</div>
+                    <Avatar name={p.name} avatars={avatars} size={42} />
+                    <div style={{ flex:1,minWidth:0 }}>
+                      <div style={{ fontWeight:600,fontSize:'1rem',marginBottom:'3px' }}>{p.name}</div>
+                      <div style={{ display:'flex',gap:'6px',flexWrap:'wrap' }}>
+                        <span style={{ fontSize:'0.68rem',color:'#C9A84C' }}>🥇 {p.wins}×</span>
+                        <span style={{ fontSize:'0.68rem',color:'#4ade80' }}>💰 {p.itm}× ITM</span>
+                        <span style={{ fontSize:'0.68rem',color:'var(--text-muted)' }}>🎰 {p.played}</span>
+                      </div>
+                    </div>
+                    <div style={{ textAlign:'right',flexShrink:0 }}>
+                      {p.prizeMoney>0 && <div className="font-display" style={{ fontSize:'0.9rem',color:'#4ade80' }}>+{p.prizeMoney}€</div>}
+                      <div style={{ fontSize:'0.7rem',color:'var(--text-muted)' }}>{itmPct}% ITM</div>
+                    </div>
+                    <div style={{ color:'var(--text-muted)',fontSize:'0.9rem',marginLeft:'4px' }}>{isOpen?'▲':'▼'}</div>
                   </div>
+
+                  {/* Expanded stats */}
+                  {isOpen && (
+                    <div style={{ borderTop:'1px solid rgba(201,168,76,0.1)',padding:'14px 16px' }}
+                      onClick={e=>e.stopPropagation()}>
+
+                      {/* Stats grid */}
+                      <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'10px' }}>
+                        {[
+                          {label:'Turniere',value:p.played},
+                          {label:'Siege 🥇',value:p.wins},
+                          {label:'ITM 💰',value:p.itm},
+                          {label:'ITM %',value:itmPct+'%'},
+                          {label:'Platz 2 🥈',value:p.second},
+                          {label:'Platz 3 🥉',value:p.third},
+                          {label:'Bester Platz',value:p.bestPlace===Infinity?'—':'#'+p.bestPlace},
+                          {label:'Rebuys',value:p.rebuys},
+                          {label:'Preisgeld',value:p.prizeMoney>0?'+'+p.prizeMoney+'€':'—',color:p.prizeMoney>0?'#4ade80':undefined},
+                        ].map(s=>(
+                          <div key={s.label} style={{ background:'rgba(0,0,0,0.2)',borderRadius:'8px',padding:'10px 8px',textAlign:'center',border:'1px solid rgba(255,255,255,0.04)' }}>
+                            <div className="font-display" style={{ fontSize:'0.85rem',color:s.color||'var(--gold)' }}>{s.value}</div>
+                            <div style={{ fontSize:'0.6rem',color:'var(--text-muted)',marginTop:'3px',fontFamily:'Cinzel,serif',letterSpacing:'0.06em' }}>{s.label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* ITM bar */}
+                      {p.played>0 && (
+                        <div style={{ marginBottom:'14px' }}>
+                          <div style={{ display:'flex',borderRadius:'6px',overflow:'hidden',height:'8px',marginBottom:'4px' }}>
+                            <div style={{ flex:p.wins,background:'#C9A84C',opacity:0.9 }} />
+                            <div style={{ flex:p.itm-p.wins,background:'#4ade80',opacity:0.7 }} />
+                            <div style={{ flex:p.played-p.itm,background:'rgba(255,255,255,0.1)' }} />
+                          </div>
+                          <div style={{ display:'flex',justifyContent:'space-between',fontSize:'0.65rem',color:'var(--text-muted)' }}>
+                            <span style={{ color:'#C9A84C' }}>🥇 {p.wins} Siege</span>
+                            <span style={{ color:'#4ade80' }}>💰 {p.itm} ITM</span>
+                            <span>🎰 {p.played} gesamt</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tournament history */}
+                      <div style={{ fontFamily:'Cinzel,serif',fontSize:'0.65rem',color:'var(--text-muted)',letterSpacing:'0.1em',marginBottom:'8px' }}>
+                        TURNIER VERLAUF ({p.tournaments.length})
+                      </div>
+                      {[...p.tournaments].sort((a,b)=>b.date.localeCompare(a.date)).map((t,ti)=>{
+                        const medal = t.place===1?'🥇':t.place===2?'🥈':t.place===3?'🥉':`#${t.place}`
+                        return (
+                          <div key={ti} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 0',borderBottom:'1px solid rgba(255,255,255,0.04)',fontSize:'0.8rem' }}>
+                            <span style={{ color:'var(--text-muted)',fontSize:'0.72rem',minWidth:'72px' }}>{t.date}</span>
+                            <span style={{ flex:1,marginLeft:'8px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--text-primary)' }}>{t.name}</span>
+                            <span style={{ margin:'0 8px' }}>{medal}</span>
+                            {t.rebuys>0 && <span style={{ fontSize:'0.65rem',color:'#f472b6',marginRight:'6px' }}>{t.rebuys}R</span>}
+                            {t.prize>0
+                              ? <span className="font-display" style={{ color:'#4ade80',fontSize:'0.78rem' }}>+{t.prize}€</span>
+                              : <span style={{ color:'var(--text-muted)',fontSize:'0.78rem' }}>–</span>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))
+              )
+            })
           })()}
         </div>
       )}
