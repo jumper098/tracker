@@ -522,85 +522,91 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       {/* ── LIVE ── */}
       {t && view === 'live' && (() => {
         if (tvMode) return (
-          <div style={{ position:'fixed',inset:0,background:'#0a0a0c',zIndex:1000,display:'flex',flexDirection:'column',padding:'24px 32px',fontFamily:'Cinzel,serif',overflow:'hidden' }}>
+          <div style={{ position:'fixed',inset:0,background:'#0a0a0c',zIndex:1000,display:'flex',flexDirection:'column',padding:'20px 28px 20px',fontFamily:'Cinzel,serif',overflow:'hidden' }}>
 
             {/* Top bar */}
-            <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'20px' }}>
-              <div style={{ fontSize:'1rem',color:'var(--gold)',letterSpacing:'0.15em' }}>{t.name}</div>
+            <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px',flexShrink:0 }}>
+              <div style={{ fontSize:'1.1rem',color:'var(--gold)',letterSpacing:'0.2em' }}>🎰 {t.name}</div>
               <div style={{ display:'flex',gap:'10px' }}>
-                <button onClick={toggleTimer} style={{ padding:'10px 24px',borderRadius:'8px',border:`1px solid ${t.timerPaused?'rgba(74,222,128,0.5)':'rgba(248,113,113,0.4)'}`,background:t.timerPaused?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.1)',color:t.timerPaused?'#4ade80':'#f87171',fontFamily:'Cinzel,serif',fontSize:'0.85rem',cursor:'pointer',letterSpacing:'0.1em' }}>
+                <button onClick={()=>{ if(lvl>0) advanceLevel(t,lvl-1) }} disabled={lvl===0}
+                  style={{ padding:'10px 18px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'1rem',cursor:'pointer',opacity:lvl===0?0.3:1 }}>◄</button>
+                <button onClick={()=>{ if(lvl<t.blinds.length-1) advanceLevel(t,lvl+1) }} disabled={lvl>=t.blinds.length-1}
+                  style={{ padding:'10px 18px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'1rem',cursor:'pointer',opacity:lvl>=t.blinds.length-1?0.3:1 }}>►</button>
+                <button onClick={toggleTimer} style={{ padding:'10px 28px',borderRadius:'8px',border:`1px solid ${t.timerPaused?'rgba(74,222,128,0.5)':'rgba(248,113,113,0.4)'}`,background:t.timerPaused?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.1)',color:t.timerPaused?'#4ade80':'#f87171',fontFamily:'Cinzel,serif',fontSize:'0.9rem',cursor:'pointer',letterSpacing:'0.1em' }}>
                   {t.timerPaused ? '▶ WEITER' : '⏸ PAUSE'}
                 </button>
                 <button onClick={()=>setTvMode(false)} style={{ padding:'10px 18px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.06)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'0.8rem',cursor:'pointer' }}>✕ EXIT</button>
               </div>
             </div>
 
-            {/* Main grid: left = timer, right = players */}
-            <div style={{ display:'grid',gridTemplateColumns:'1fr 340px',gap:'28px',flex:1,minHeight:0 }}>
+            {/* Main grid */}
+            <div style={{ display:'grid',gridTemplateColumns:'1fr 380px',gap:'20px',flex:1,minHeight:0 }}>
 
-              {/* LEFT — Timer + info */}
-              <div style={{ display:'flex',flexDirection:'column',gap:'16px' }}>
+              {/* LEFT */}
+              <div style={{ display:'flex',flexDirection:'column',gap:'14px',minHeight:0 }}>
 
-                {/* Timer block */}
-                <div style={{ textAlign:'center',background:'rgba(0,0,0,0.4)',borderRadius:'20px',border:`2px solid ${isPause?'rgba(96,165,250,0.4)':timerColor+'55'}`,padding:'28px 20px 20px',flex:'0 0 auto' }}>
-                  {isPause && <div style={{ fontSize:'0.75rem',color:'#60a5fa',letterSpacing:'0.25em',marginBottom:'8px' }}>☕ PAUSE</div>}
-                  {!isPause && <div style={{ fontSize:'0.75rem',color:'var(--text-muted)',letterSpacing:'0.25em',marginBottom:'8px' }}>LEVEL {realLevelNum}</div>}
-                  <div style={{ fontSize:'clamp(6rem,14vw,11rem)',color:timerColor,lineHeight:1,letterSpacing:'0.04em',fontVariantNumeric:'tabular-nums' }}>
+                {/* Timer + Blinds block */}
+                <div style={{ textAlign:'center',background:'rgba(0,0,0,0.35)',borderRadius:'18px',border:`2px solid ${isPause?'rgba(96,165,250,0.4)':timerColor+'66'}`,padding:'20px 24px 16px',flex:'1 1 auto',display:'flex',flexDirection:'column',justifyContent:'center' }}>
+                  {isPause
+                    ? <div style={{ fontSize:'clamp(0.9rem,1.5vw,1.2rem)',color:'#60a5fa',letterSpacing:'0.3em',marginBottom:'10px' }}>☕ PAUSE</div>
+                    : <div style={{ fontSize:'clamp(0.8rem,1.2vw,1rem)',color:'var(--text-muted)',letterSpacing:'0.3em',marginBottom:'8px' }}>LEVEL {realLevelNum}</div>
+                  }
+
+                  {/* TIMER — biggest element */}
+                  <div style={{ fontSize:'clamp(7rem,18vw,14rem)',color:timerColor,lineHeight:1,letterSpacing:'0.04em',fontVariantNumeric:'tabular-nums' }}>
                     {timerMin}:{timerSec}
                   </div>
+
                   {/* Blinds */}
                   {!isPause && (
-                    <div style={{ display:'flex',justifyContent:'center',gap:'40px',marginTop:'16px' }}>
-                      <div style={{ textAlign:'center' }}>
-                        <div style={{ fontSize:'0.6rem',color:'var(--text-muted)',letterSpacing:'0.15em',marginBottom:'4px' }}>SMALL BLIND</div>
-                        <div style={{ fontSize:'clamp(2rem,4vw,3.2rem)',color:'var(--gold)',lineHeight:1 }}>{currentBlind?.sb}</div>
+                    <div style={{ display:'flex',justifyContent:'center',gap:'0',marginTop:'20px',background:'rgba(201,168,76,0.06)',borderRadius:'12px',border:'1px solid rgba(201,168,76,0.15)',overflow:'hidden' }}>
+                      <div style={{ flex:1,textAlign:'center',padding:'16px 20px' }}>
+                        <div style={{ fontSize:'clamp(0.55rem,0.9vw,0.75rem)',color:'var(--text-muted)',letterSpacing:'0.18em',marginBottom:'8px' }}>SMALL BLIND</div>
+                        <div style={{ fontSize:'clamp(2.5rem,5.5vw,4.5rem)',color:'var(--gold)',lineHeight:1,fontWeight:'bold' }}>{currentBlind?.sb}</div>
                       </div>
-                      <div style={{ width:'1px',background:'rgba(255,255,255,0.1)',margin:'4px 0' }} />
-                      <div style={{ textAlign:'center' }}>
-                        <div style={{ fontSize:'0.6rem',color:'var(--text-muted)',letterSpacing:'0.15em',marginBottom:'4px' }}>BIG BLIND</div>
-                        <div style={{ fontSize:'clamp(2rem,4vw,3.2rem)',color:'var(--gold)',lineHeight:1 }}>{currentBlind?.bb}</div>
+                      <div style={{ width:'1px',background:'rgba(201,168,76,0.2)',margin:'12px 0' }} />
+                      <div style={{ flex:1,textAlign:'center',padding:'16px 20px' }}>
+                        <div style={{ fontSize:'clamp(0.55rem,0.9vw,0.75rem)',color:'var(--text-muted)',letterSpacing:'0.18em',marginBottom:'8px' }}>BIG BLIND</div>
+                        <div style={{ fontSize:'clamp(2.5rem,5.5vw,4.5rem)',color:'var(--gold)',lineHeight:1,fontWeight:'bold' }}>{currentBlind?.bb}</div>
                       </div>
                     </div>
                   )}
+
                   {/* Next level */}
                   {nextBlind && (
-                    <div style={{ marginTop:'14px',fontSize:'0.75rem',color:'var(--text-muted)' }}>
-                      Nächstes Level: <span style={{ color:'#60a5fa' }}>{nextBlind.pause?'☕ Pause':`${nextBlind.sb} / ${nextBlind.bb}`}</span>
-                      <span style={{ marginLeft:'12px',color:'var(--text-muted)' }}>{nextBlind.duration} Min</span>
+                    <div style={{ marginTop:'14px',padding:'10px 20px',borderRadius:'10px',background:'rgba(96,165,250,0.06)',border:'1px solid rgba(96,165,250,0.2)',display:'inline-flex',gap:'16px',justifyContent:'center',alignItems:'baseline' }}>
+                      <span style={{ fontSize:'clamp(0.6rem,1vw,0.85rem)',color:'var(--text-muted)',letterSpacing:'0.12em' }}>NÄCHSTES LEVEL →</span>
+                      <span style={{ fontSize:'clamp(1.1rem,2.2vw,1.8rem)',color:'#60a5fa',lineHeight:1 }}>
+                        {nextBlind.pause ? '☕ Pause' : `${nextBlind.sb} / ${nextBlind.bb}`}
+                      </span>
+                      <span style={{ fontSize:'clamp(0.6rem,1vw,0.85rem)',color:'var(--text-muted)' }}>{nextBlind.duration} Min</span>
                     </div>
                   )}
-                  {/* Level controls */}
-                  <div style={{ display:'flex',gap:'8px',justifyContent:'center',marginTop:'14px' }}>
-                    <button onClick={()=>{ if(lvl>0) advanceLevel(t,lvl-1) }} disabled={lvl===0}
-                      style={{ padding:'8px 20px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'0.9rem',cursor:'pointer',opacity:lvl===0?0.3:1 }}>◄</button>
-                    <button onClick={()=>{ if(lvl<t.blinds.length-1) advanceLevel(t,lvl+1) }} disabled={lvl>=t.blinds.length-1}
-                      style={{ padding:'8px 20px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'0.9rem',cursor:'pointer',opacity:lvl>=t.blinds.length-1?0.3:1 }}>►</button>
-                  </div>
                 </div>
 
                 {/* Stats row */}
-                <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'12px' }}>
+                <div style={{ display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px',flexShrink:0 }}>
                   {[
                     {label:'GESAMTPOT',value:totalPot+'€',color:'#4ade80'},
                     {label:'CHIPS',value:totalChips.toLocaleString(),color:'#38bdf8'},
                     {label:'Ø STACK',value:avgStack.toLocaleString(),color:'#a78bfa'},
                     {label:'REBUYS',value:totalRebuys,color:'#f472b6'},
                   ].map(s=>(
-                    <div key={s.label} style={{ textAlign:'center',padding:'14px 8px',borderRadius:'12px',background:'rgba(0,0,0,0.3)',border:'1px solid rgba(255,255,255,0.07)' }}>
-                      <div style={{ fontSize:'0.55rem',color:'var(--text-muted)',letterSpacing:'0.12em',marginBottom:'6px' }}>{s.label}</div>
-                      <div style={{ fontSize:'clamp(1.2rem,2.5vw,2rem)',color:s.color,lineHeight:1 }}>{s.value}</div>
+                    <div key={s.label} style={{ textAlign:'center',padding:'16px 8px',borderRadius:'12px',background:'rgba(0,0,0,0.3)',border:'1px solid rgba(255,255,255,0.07)' }}>
+                      <div style={{ fontSize:'clamp(0.5rem,0.8vw,0.7rem)',color:'var(--text-muted)',letterSpacing:'0.12em',marginBottom:'8px' }}>{s.label}</div>
+                      <div style={{ fontSize:'clamp(1.4rem,3vw,2.4rem)',color:s.color,lineHeight:1 }}>{s.value}</div>
                     </div>
                   ))}
                 </div>
 
                 {/* Payouts */}
                 {t.payouts.some(p=>p.pct>0) && (
-                  <div style={{ display:'flex',gap:'10px' }}>
+                  <div style={{ display:'flex',gap:'10px',flexShrink:0 }}>
                     {t.payouts.filter(p=>p.pct>0).map((p,i)=>(
-                      <div key={i} style={{ flex:1,textAlign:'center',padding:'12px 8px',borderRadius:'12px',background:'rgba(0,0,0,0.3)',border:'1px solid rgba(201,168,76,0.15)' }}>
-                        <div style={{ fontSize:'1.4rem',marginBottom:'4px' }}>{['🥇','🥈','🥉'][i]||`${i+1}.`}</div>
-                        <div style={{ fontSize:'clamp(1rem,2vw,1.6rem)',color:'var(--gold)' }}>{Math.round(totalPot*p.pct/100)}€</div>
-                        <div style={{ fontSize:'0.6rem',color:'var(--text-muted)',marginTop:'2px' }}>{p.pct}%</div>
+                      <div key={i} style={{ flex:1,textAlign:'center',padding:'14px 8px',borderRadius:'12px',background:'rgba(0,0,0,0.3)',border:'1px solid rgba(201,168,76,0.18)' }}>
+                        <div style={{ fontSize:'clamp(1.2rem,2vw,1.6rem)',marginBottom:'6px' }}>{['🥇','🥈','🥉'][i]||`${i+1}.`}</div>
+                        <div style={{ fontSize:'clamp(1.2rem,2.5vw,2rem)',color:'var(--gold)',lineHeight:1 }}>{Math.round(totalPot*p.pct/100)}€</div>
+                        <div style={{ fontSize:'clamp(0.55rem,0.9vw,0.75rem)',color:'var(--text-muted)',marginTop:'4px' }}>{p.pct}%</div>
                       </div>
                     ))}
                   </div>
@@ -608,31 +614,31 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
               </div>
 
               {/* RIGHT — Players */}
-              <div style={{ display:'flex',flexDirection:'column',gap:'12px',overflowY:'auto' }}>
-                <div style={{ fontSize:'0.65rem',color:'#4ade80',letterSpacing:'0.18em',marginBottom:'2px' }}>IM SPIEL ({activePlayers})</div>
+              <div style={{ display:'flex',flexDirection:'column',gap:'8px',overflowY:'auto',minHeight:0 }}>
+                <div style={{ fontSize:'clamp(0.6rem,0.9vw,0.75rem)',color:'#4ade80',letterSpacing:'0.2em',marginBottom:'4px',flexShrink:0 }}>IM SPIEL ({activePlayers})</div>
                 {t.players.filter(p=>!p.eliminated).map(p=>(
-                  <div key={p.name} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px',borderRadius:'12px',background:'rgba(74,222,128,0.06)',border:'1px solid rgba(74,222,128,0.18)' }}>
-                    <Avatar name={p.name} avatars={avatars} size={36} />
-                    <span style={{ flex:1,fontSize:'1rem',color:'var(--text-primary)' }}>{p.name}</span>
-                    {(p.rebuys||0)>0 && <span style={{ fontSize:'0.75rem',color:'#f472b6',background:'rgba(244,114,182,0.12)',border:'1px solid rgba(244,114,182,0.3)',borderRadius:'6px',padding:'2px 7px' }}>{p.rebuys}× R</span>}
-                    <button onClick={()=>setRebuyConfirm(p.name)} style={{ padding:'4px 10px',borderRadius:'6px',border:'1px solid rgba(244,114,182,0.4)',background:'rgba(244,114,182,0.1)',color:'#f472b6',fontSize:'0.75rem',cursor:'pointer' }}>+R</button>
-                    <button onClick={()=>eliminatePlayer(p.name)} style={{ padding:'4px 10px',borderRadius:'6px',border:'1px solid rgba(248,113,113,0.35)',background:'rgba(248,113,113,0.08)',color:'#f87171',fontSize:'0.75rem',cursor:'pointer' }}>✕</button>
+                  <div key={p.name} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'12px 14px',borderRadius:'12px',background:'rgba(74,222,128,0.06)',border:'1px solid rgba(74,222,128,0.18)',flexShrink:0 }}>
+                    <Avatar name={p.name} avatars={avatars} size={38} />
+                    <span style={{ flex:1,fontSize:'clamp(0.9rem,1.5vw,1.2rem)',color:'var(--text-primary)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{p.name}</span>
+                    {(p.rebuys||0)>0 && <span style={{ fontSize:'0.8rem',color:'#f472b6',background:'rgba(244,114,182,0.12)',border:'1px solid rgba(244,114,182,0.3)',borderRadius:'6px',padding:'3px 8px',flexShrink:0 }}>{p.rebuys}×R</span>}
+                    <button onClick={()=>setRebuyConfirm(p.name)} style={{ padding:'6px 12px',borderRadius:'6px',border:'1px solid rgba(244,114,182,0.4)',background:'rgba(244,114,182,0.1)',color:'#f472b6',fontSize:'0.8rem',cursor:'pointer',flexShrink:0 }}>+R</button>
+                    <button onClick={()=>eliminatePlayer(p.name)} style={{ padding:'6px 12px',borderRadius:'6px',border:'1px solid rgba(248,113,113,0.35)',background:'rgba(248,113,113,0.08)',color:'#f87171',fontSize:'0.8rem',cursor:'pointer',flexShrink:0 }}>✕</button>
                   </div>
                 ))}
 
                 {t.players.filter(p=>p.eliminated).length>0 && (
                   <>
-                    <div style={{ fontSize:'0.65rem',color:'#f87171',letterSpacing:'0.18em',marginTop:'8px',marginBottom:'2px' }}>AUSGESCHIEDEN</div>
+                    <div style={{ fontSize:'clamp(0.6rem,0.9vw,0.75rem)',color:'#f87171',letterSpacing:'0.2em',marginTop:'10px',marginBottom:'4px',flexShrink:0 }}>AUSGESCHIEDEN</div>
                     {[...t.players.filter(p=>p.eliminated)].sort((a,b)=>(a.place||99)-(b.place||99)).map(p=>{
                       const medal=p.place===1?'🥇':p.place===2?'🥈':p.place===3?'🥉':`${p.place}.`
                       const prize=t.payouts[p.place-1]?Math.round(totalPot*t.payouts[p.place-1].pct/100):0
                       return (
-                        <div key={p.name} style={{ display:'flex',alignItems:'center',gap:'8px',padding:'8px 12px',borderRadius:'10px',background:'rgba(248,113,113,0.05)',border:'1px solid rgba(248,113,113,0.12)' }}>
-                          <span style={{ fontSize:'0.9rem',minWidth:'22px' }}>{medal}</span>
-                          <Avatar name={p.name} avatars={avatars} size={28} />
-                          <span style={{ flex:1,fontSize:'0.85rem',color:'#f87171' }}>{p.name}</span>
-                          {prize>0 && <span style={{ fontSize:'0.85rem',color:'#4ade80',fontFamily:'Cinzel,serif' }}>+{prize}€</span>}
-                          <button onClick={()=>rejoinPlayer(p.name)} style={{ width:'24px',height:'24px',borderRadius:'50%',border:'1px solid rgba(74,222,128,0.5)',background:'rgba(74,222,128,0.12)',color:'#4ade80',fontSize:'1rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>+</button>
+                        <div key={p.name} style={{ display:'flex',alignItems:'center',gap:'8px',padding:'10px 12px',borderRadius:'10px',background:'rgba(248,113,113,0.05)',border:'1px solid rgba(248,113,113,0.12)',flexShrink:0 }}>
+                          <span style={{ fontSize:'1rem',minWidth:'24px' }}>{medal}</span>
+                          <Avatar name={p.name} avatars={avatars} size={30} />
+                          <span style={{ flex:1,fontSize:'clamp(0.85rem,1.3vw,1.05rem)',color:'#f87171',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{p.name}</span>
+                          {prize>0 && <span style={{ fontSize:'clamp(0.8rem,1.2vw,1rem)',color:'#4ade80',fontFamily:'Cinzel,serif',flexShrink:0 }}>+{prize}€</span>}
+                          <button onClick={()=>rejoinPlayer(p.name)} style={{ width:'28px',height:'28px',borderRadius:'50%',border:'1px solid rgba(74,222,128,0.5)',background:'rgba(74,222,128,0.12)',color:'#4ade80',fontSize:'1.1rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>+</button>
                         </div>
                       )
                     })}
@@ -640,6 +646,23 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                 )}
               </div>
             </div>
+
+            {/* Rebuy confirm — works in TV mode too */}
+            {rebuyConfirm && (
+              <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1100,padding:'20px' }}>
+                <div className="card" style={{ maxWidth:'360px',width:'100%',padding:'28px',textAlign:'center' }}>
+                  <div style={{ fontSize:'2rem',marginBottom:'10px' }}>↺</div>
+                  <div className="font-display" style={{ fontSize:'0.9rem',color:'var(--gold)',marginBottom:'6px' }}>REBUY BESTÄTIGEN</div>
+                  <div style={{ fontSize:'1.1rem',marginBottom:'6px' }}>{rebuyConfirm}</div>
+                  <div style={{ fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'24px' }}>+{t?.buyin}€ · {t?.chips?.toLocaleString()} Chips</div>
+                  <div style={{ display:'flex',gap:'10px' }}>
+                    <button className="btn-ghost" style={{ flex:1 }} onClick={()=>setRebuyConfirm(null)}>Abbrechen</button>
+                    <button style={{ flex:1,background:'rgba(244,114,182,0.12)',color:'#f472b6',border:'1px solid rgba(244,114,182,0.4)',borderRadius:'10px',padding:'13px',fontFamily:'Cinzel,serif',fontSize:'0.75rem',cursor:'pointer' }}
+                      onClick={()=>{ addRebuy(rebuyConfirm); setRebuyConfirm(null) }}>✓ Bestätigen</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )
 
