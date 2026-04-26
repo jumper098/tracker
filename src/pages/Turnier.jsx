@@ -143,16 +143,13 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     db.from('live_tournament').select('data').eq('id', 'current').single()
       .then(({ data }) => {
         if (data?.data?.tournament) {
-          // Always reload as paused — user presses Weiter to continue
-          const tournament = {
-            ...data.data.tournament,
-            timerPaused: true,
-            timerStartedAt: null,
-          }
-          tRef.current = tournament   // set ref BEFORE startTimer reads it
+          const tournament = data.data.tournament
+          tRef.current = tournament
           setT(tournament)
           setView('live')
-          setTimeLeft(calcRemaining(tournament))
+          // If tournament is running, start the timer from the correct position
+          // calcRemaining uses timerStartedAt so it's always in sync with other devices
+          startTimer(tournament)
         }
       }).catch(() => {})
 
@@ -529,7 +526,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
       {/* ── LIVE ── */}
       {t && view === 'live' && (() => {
         if (tvMode) return (
-          <div style={{ position:'fixed',inset:0,background:'#0a0a0c',zIndex:1000,display:'flex',flexDirection:'column',padding:'20px 28px 20px',fontFamily:'Cinzel,serif',overflow:'hidden' }}>
+          <div style={{ position:'fixed',inset:0,background:'#0a0a0c',zIndex:1000,display:'flex',flexDirection:'column',padding:'14px 20px',fontFamily:'Cinzel,serif',overflow:'hidden' }}>
 
             {/* Top bar */}
             <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px',flexShrink:0 }}>
@@ -547,34 +544,34 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
             </div>
 
             {/* Main grid */}
-            <div style={{ display:'grid',gridTemplateColumns:'1fr 380px',gap:'20px',flex:1,minHeight:0 }}>
+            <div style={{ display:'grid',gridTemplateColumns:'1fr 420px',gap:'16px',flex:1,minHeight:0 }}>
 
               {/* LEFT */}
-              <div style={{ display:'flex',flexDirection:'column',gap:'14px',minHeight:0 }}>
+              <div style={{ display:'flex',flexDirection:'column',gap:'10px',minHeight:0 }}>
 
                 {/* Timer + Blinds block */}
-                <div style={{ textAlign:'center',background:'rgba(0,0,0,0.35)',borderRadius:'18px',border:`2px solid ${isPause?'rgba(96,165,250,0.4)':timerColor+'66'}`,padding:'20px 24px 16px',flex:'1 1 auto',display:'flex',flexDirection:'column',justifyContent:'center' }}>
+                <div style={{ textAlign:'center',background:'rgba(0,0,0,0.35)',borderRadius:'18px',border:`2px solid ${isPause?'rgba(96,165,250,0.4)':timerColor+'66'}`,padding:'16px 24px 12px',flex:'1 1 0',display:'flex',flexDirection:'column',justifyContent:'space-evenly',minHeight:0 }}>
                   {isPause
-                    ? <div style={{ fontSize:'clamp(0.9rem,1.5vw,1.2rem)',color:'#60a5fa',letterSpacing:'0.3em',marginBottom:'10px' }}>☕ PAUSE</div>
-                    : <div style={{ fontSize:'clamp(0.8rem,1.2vw,1rem)',color:'var(--text-muted)',letterSpacing:'0.3em',marginBottom:'8px' }}>LEVEL {realLevelNum}</div>
+                    ? <div style={{ fontSize:'clamp(1rem,1.6vw,1.4rem)',color:'#60a5fa',letterSpacing:'0.3em' }}>☕ PAUSE</div>
+                    : <div style={{ fontSize:'clamp(1rem,1.6vw,1.4rem)',color:'var(--text-muted)',letterSpacing:'0.3em' }}>LEVEL {realLevelNum}</div>
                   }
 
                   {/* TIMER — biggest element */}
-                  <div style={{ fontSize:'clamp(7rem,18vw,14rem)',color:timerColor,lineHeight:1,letterSpacing:'0.04em',fontVariantNumeric:'tabular-nums' }}>
+                  <div style={{ fontSize:'clamp(8rem,20vw,17rem)',color:timerColor,lineHeight:1,letterSpacing:'0.04em',fontVariantNumeric:'tabular-nums' }}>
                     {timerMin}:{timerSec}
                   </div>
 
                   {/* Blinds */}
                   {!isPause && (
                     <div style={{ display:'flex',justifyContent:'center',gap:'0',marginTop:'20px',background:'rgba(201,168,76,0.06)',borderRadius:'12px',border:'1px solid rgba(201,168,76,0.15)',overflow:'hidden' }}>
-                      <div style={{ flex:1,textAlign:'center',padding:'16px 20px' }}>
-                        <div style={{ fontSize:'clamp(0.55rem,0.9vw,0.75rem)',color:'var(--text-muted)',letterSpacing:'0.18em',marginBottom:'8px' }}>SMALL BLIND</div>
-                        <div style={{ fontSize:'clamp(2.5rem,5.5vw,4.5rem)',color:'var(--gold)',lineHeight:1,fontWeight:'bold' }}>{currentBlind?.sb}</div>
+                      <div style={{ flex:1,textAlign:'center',padding:'20px 28px' }}>
+                        <div style={{ fontSize:'clamp(0.55rem,0.9vw,0.75rem)',color:'var(--text-muted)',letterSpacing:'0.2em',marginBottom:'12px' }}>SMALL BLIND</div>
+                        <div style={{ fontSize:'clamp(3.5rem,7vw,6rem)',color:'var(--gold)',lineHeight:1 }}>{currentBlind?.sb}</div>
                       </div>
                       <div style={{ width:'1px',background:'rgba(201,168,76,0.2)',margin:'12px 0' }} />
-                      <div style={{ flex:1,textAlign:'center',padding:'16px 20px' }}>
-                        <div style={{ fontSize:'clamp(0.55rem,0.9vw,0.75rem)',color:'var(--text-muted)',letterSpacing:'0.18em',marginBottom:'8px' }}>BIG BLIND</div>
-                        <div style={{ fontSize:'clamp(2.5rem,5.5vw,4.5rem)',color:'var(--gold)',lineHeight:1,fontWeight:'bold' }}>{currentBlind?.bb}</div>
+                      <div style={{ flex:1,textAlign:'center',padding:'20px 28px' }}>
+                        <div style={{ fontSize:'clamp(0.55rem,0.9vw,0.75rem)',color:'var(--text-muted)',letterSpacing:'0.2em',marginBottom:'12px' }}>BIG BLIND</div>
+                        <div style={{ fontSize:'clamp(3.5rem,7vw,6rem)',color:'var(--gold)',lineHeight:1 }}>{currentBlind?.bb}</div>
                       </div>
                     </div>
                   )}
@@ -582,8 +579,8 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                   {/* Next level */}
                   {nextBlind && (
                     <div style={{ marginTop:'14px',padding:'10px 20px',borderRadius:'10px',background:'rgba(96,165,250,0.06)',border:'1px solid rgba(96,165,250,0.2)',display:'inline-flex',gap:'16px',justifyContent:'center',alignItems:'baseline' }}>
-                      <span style={{ fontSize:'clamp(0.6rem,1vw,0.85rem)',color:'var(--text-muted)',letterSpacing:'0.12em' }}>NÄCHSTES LEVEL →</span>
-                      <span style={{ fontSize:'clamp(1.1rem,2.2vw,1.8rem)',color:'#60a5fa',lineHeight:1 }}>
+                      <span style={{ fontSize:'clamp(0.75rem,1.1vw,1rem)',color:'var(--text-muted)',letterSpacing:'0.15em' }}>NÄCHSTES LEVEL →</span>
+                      <span style={{ fontSize:'clamp(2rem,3.8vw,3.2rem)',color:'#60a5fa',lineHeight:1 }}>
                         {nextBlind.pause ? '☕ Pause' : `${nextBlind.sb} / ${nextBlind.bb}`}
                       </span>
                       <span style={{ fontSize:'clamp(0.6rem,1vw,0.85rem)',color:'var(--text-muted)' }}>{nextBlind.duration} Min</span>
@@ -601,7 +598,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                   ].map(s=>(
                     <div key={s.label} style={{ textAlign:'center',padding:'16px 8px',borderRadius:'12px',background:'rgba(0,0,0,0.3)',border:'1px solid rgba(255,255,255,0.07)' }}>
                       <div style={{ fontSize:'clamp(0.5rem,0.8vw,0.7rem)',color:'var(--text-muted)',letterSpacing:'0.12em',marginBottom:'8px' }}>{s.label}</div>
-                      <div style={{ fontSize:'clamp(1.4rem,3vw,2.4rem)',color:s.color,lineHeight:1 }}>{s.value}</div>
+                      <div style={{ fontSize:'clamp(1.8rem,3.5vw,3rem)',color:s.color,lineHeight:1 }}>{s.value}</div>
                     </div>
                   ))}
                 </div>
@@ -612,7 +609,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                     {t.payouts.filter(p=>p.pct>0).map((p,i)=>(
                       <div key={i} style={{ flex:1,textAlign:'center',padding:'14px 8px',borderRadius:'12px',background:'rgba(0,0,0,0.3)',border:'1px solid rgba(201,168,76,0.18)' }}>
                         <div style={{ fontSize:'clamp(1.2rem,2vw,1.6rem)',marginBottom:'6px' }}>{['🥇','🥈','🥉'][i]||`${i+1}.`}</div>
-                        <div style={{ fontSize:'clamp(1.2rem,2.5vw,2rem)',color:'var(--gold)',lineHeight:1 }}>{Math.round(totalPot*p.pct/100)}€</div>
+                        <div style={{ fontSize:'clamp(1.6rem,3vw,2.6rem)',color:'var(--gold)',lineHeight:1 }}>{Math.round(totalPot*p.pct/100)}€</div>
                         <div style={{ fontSize:'clamp(0.55rem,0.9vw,0.75rem)',color:'var(--text-muted)',marginTop:'4px' }}>{p.pct}%</div>
                       </div>
                     ))}
