@@ -127,10 +127,15 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     db.from('live_tournament').select('data').eq('id', 'current').single()
       .then(({ data }) => {
         if (data?.data?.tournament) {
-          const tournament = data.data.tournament
+          // Always reload as paused — user presses Weiter to continue
+          const tournament = {
+            ...data.data.tournament,
+            timerPaused: true,
+            timerStartedAt: null,
+          }
+          tRef.current = tournament   // set ref BEFORE startTimer reads it
           setT(tournament)
-          startTimer(tournament)
-          // view auto-derives from t
+          setTimeLeft(calcRemaining(tournament))
         }
       }).catch(() => {})
 
