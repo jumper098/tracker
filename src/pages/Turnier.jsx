@@ -50,7 +50,7 @@ function calcRemaining(t) {
 }
 
 export default function Turnier({ sessions, tournaments, onRefresh, players, avatars = {} }) {
-  const [view, setView] = useState('create')
+  const [view, setView] = useState('history')
   const [t, setT] = useState(null)
   const [timeLeft, setTimeLeft] = useState(0)
   const timerRef = useRef(null)
@@ -409,7 +409,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
           {[
             ...(t ? [{id:'live',label:'🔴 Live'}] : []),
             {id:'create',label:'✚ Erstellen'},
-            {id:'history',label:'📋 Verlauf'},
+            {id:'history',label:'🎰 Turniere'},
             {id:'rankings',label:'🏆 Rangliste'},
           ].map(v => (
             <button key={v.id} onClick={() => setView(v.id)} className="btn-ghost"
