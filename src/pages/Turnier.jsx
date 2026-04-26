@@ -695,21 +695,34 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
         <div>
           {(() => {
             const stats = {}
-            tournaments.flatMap(t=>t.results||[]).forEach(r => {
-              if (!stats[r.name]) stats[r.name]={name:r.name,wins:0,top3:0,played:0}
-              stats[r.name].played++
-              if (r.place===1) stats[r.name].wins++
-              if (r.place<=3) stats[r.name].top3++
+            tournaments.forEach(ht => {
+              const payoutPlaces = (ht.payouts||[]).filter(p=>p.pct>0).length
+              ;(ht.results||[]).forEach(r => {
+                if (!stats[r.name]) stats[r.name]={name:r.name,wins:0,second:0,third:0,itm:0,played:0}
+                stats[r.name].played++
+                if (r.place===1) stats[r.name].wins++
+                if (r.place===2) stats[r.name].second++
+                if (r.place===3) stats[r.name].third++
+                if (r.place<=payoutPlaces) stats[r.name].itm++
+              })
             })
-            const sorted = Object.values(stats).sort((a,b)=>b.wins-a.wins||b.top3-a.top3)
+            const sorted = Object.values(stats).sort((a,b)=>
+              b.wins-a.wins || b.itm-a.itm || b.second-a.second || b.third-a.third || b.played-a.played
+            )
             if (sorted.length===0) return <div className="empty-state">Noch keine Turnier-Ergebnisse ♠</div>
             return sorted.map((p,i) => (
               <div key={p.name} className="card" style={{ marginBottom:'10px',padding:'14px 16px',display:'flex',alignItems:'center',gap:'12px' }}>
                 <div style={{ fontSize:i<3?'1.4rem':'0.9rem',minWidth:'28px',textAlign:'center' }}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}</div>
                 <Avatar name={p.name} avatars={avatars} size={38} />
                 <div style={{ flex:1 }}>
-                  <div style={{ fontWeight:600 }}>{p.name}</div>
-                  <div style={{ fontSize:'0.72rem',color:'var(--text-muted)' }}>{p.wins}× 🥇 · {p.top3}× Top 3 · {p.played} Turniere</div>
+                  <div style={{ fontWeight:600,marginBottom:'4px' }}>{p.name}</div>
+                  <div style={{ display:'flex',gap:'8px',flexWrap:'wrap' }}>
+                    <span style={{ fontSize:'0.7rem',color:'#C9A84C',background:'rgba(201,168,76,0.1)',border:'1px solid rgba(201,168,76,0.25)',borderRadius:'5px',padding:'1px 6px' }}>🥇 {p.wins}×</span>
+                    <span style={{ fontSize:'0.7rem',color:'#a78bfa',background:'rgba(167,139,250,0.1)',border:'1px solid rgba(167,139,250,0.25)',borderRadius:'5px',padding:'1px 6px' }}>🥈 {p.second}×</span>
+                    <span style={{ fontSize:'0.7rem',color:'#fb923c',background:'rgba(251,146,60,0.1)',border:'1px solid rgba(251,146,60,0.25)',borderRadius:'5px',padding:'1px 6px' }}>🥉 {p.third}×</span>
+                    <span style={{ fontSize:'0.7rem',color:'#4ade80',background:'rgba(74,222,128,0.1)',border:'1px solid rgba(74,222,128,0.25)',borderRadius:'5px',padding:'1px 6px' }}>💰 {p.itm}×</span>
+                    <span style={{ fontSize:'0.7rem',color:'var(--text-muted)',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:'5px',padding:'1px 6px' }}>🎰 {p.played}</span>
+                  </div>
                 </div>
               </div>
             ))
@@ -723,28 +736,98 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
           onClick={()=>setDetailT(null)}>
           <div className="card" style={{ maxWidth:'400px',width:'100%',padding:'24px',maxHeight:'85vh',overflowY:'auto' }} onClick={e=>e.stopPropagation()}>
             <div className="font-display" style={{ fontSize:'1rem',color:'var(--gold)',marginBottom:'4px' }}>🎰 {detailT.name}</div>
-            <div style={{ fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'20px' }}>{formatDate(detailT.date)}</div>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'20px' }}>
-              {[{label:'Spieler',value:(detailT.players||[]).length},{label:'Buy-In',value:formatEuro(detailT.buyin)},{label:'Pot',value:formatEuro((detailT.players||[]).length*detailT.buyin)}].map(s=>(
-                <div key={s.label} style={{ textAlign:'center',padding:'10px 8px',borderRadius:'8px',background:'rgba(0,0,0,0.2)',border:'1px solid rgba(255,255,255,0.06)' }}>
-                  <div className="font-display" style={{ fontSize:'0.85rem',color:'var(--gold)' }}>{s.value}</div>
-                  <div style={{ fontSize:'0.6rem',color:'var(--text-muted)',marginTop:'2px' }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-            <div className="font-display" style={{ fontSize:'0.72rem',color:'var(--gold)',marginBottom:'10px' }}>ENDERGEBNIS</div>
-            {[...(detailT.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).map(r => {
-              const medal = r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':`#${r.place}`
-              const prize = detailT.payouts?.[r.place-1] ? Math.round((detailT.players||[]).length*detailT.buyin*detailT.payouts[r.place-1].pct/100) : 0
+            <div style={{ fontSize:'0.8rem',color:'var(--text-muted)',marginBottom:'16px' }}>{formatDate(detailT.date)}</div>
+
+            {/* Stats grid */}
+            {(() => {
+              const totalRebuys = (detailT.players||[]).reduce((s,p)=>s+(p.rebuys||0),0)
+              const totalEntries = (detailT.players||[]).length + totalRebuys
+              const realPot = totalEntries * detailT.buyin
               return (
-                <div key={r.name} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'10px 12px',borderRadius:'8px',marginBottom:'6px',background:r.place<=3?'rgba(201,168,76,0.06)':'rgba(0,0,0,0.15)',border:`1px solid ${r.place===1?'rgba(201,168,76,0.3)':'rgba(255,255,255,0.05)'}` }}>
-                  <span style={{ fontSize:'1.1rem' }}>{medal}</span>
-                  <Avatar name={r.name} avatars={avatars} size={30} />
-                  <span style={{ flex:1,fontWeight:600 }}>{r.name}</span>
-                  {prize>0 && <span className="font-display profit-pos">+{formatEuro(prize)}</span>}
-                </div>
+                <>
+                  <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'8px' }}>
+                    {[
+                      {label:'Spieler',value:(detailT.players||[]).length},
+                      {label:'Buy-In',value:formatEuro(detailT.buyin)},
+                      {label:'Rebuys',value:totalRebuys,color:'#f472b6'},
+                    ].map(s=>(
+                      <div key={s.label} style={{ textAlign:'center',padding:'10px 8px',borderRadius:'8px',background:'rgba(0,0,0,0.2)',border:'1px solid rgba(255,255,255,0.06)' }}>
+                        <div className="font-display" style={{ fontSize:'0.85rem',color:s.color||'var(--gold)' }}>{s.value}</div>
+                        <div style={{ fontSize:'0.6rem',color:'var(--text-muted)',marginTop:'2px' }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'20px' }}>
+                    {[
+                      {label:'Entries gesamt',value:totalEntries},
+                      {label:'Gesamtpot',value:formatEuro(realPot),color:'#4ade80'},
+                    ].map(s=>(
+                      <div key={s.label} style={{ textAlign:'center',padding:'10px 8px',borderRadius:'8px',background:'rgba(0,0,0,0.2)',border:'1px solid rgba(255,255,255,0.06)' }}>
+                        <div className="font-display" style={{ fontSize:'0.85rem',color:s.color||'var(--gold)' }}>{s.value}</div>
+                        <div style={{ fontSize:'0.6rem',color:'var(--text-muted)',marginTop:'2px' }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Payouts */}
+                  {(detailT.payouts||[]).some(p=>p.pct>0) && (
+                    <>
+                      <div className="font-display" style={{ fontSize:'0.72rem',color:'var(--gold)',marginBottom:'8px' }}>PREISGELD</div>
+                      <div style={{ display:'flex',gap:'6px',marginBottom:'20px' }}>
+                        {(detailT.payouts||[]).filter(p=>p.pct>0).map((p,i)=>(
+                          <div key={i} style={{ flex:1,textAlign:'center',padding:'8px 4px',borderRadius:'8px',background:'rgba(0,0,0,0.2)',border:'1px solid rgba(255,255,255,0.06)' }}>
+                            <div style={{ fontSize:'1rem' }}>{['🥇','🥈','🥉'][i]||`${i+1}.`}</div>
+                            <div className="font-display" style={{ fontSize:'0.9rem',color:'#4ade80' }}>{formatEuro(Math.round(realPot*p.pct/100))}</div>
+                            <div style={{ fontSize:'0.6rem',color:'var(--text-muted)' }}>{p.pct}%</div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Results */}
+                  <div className="font-display" style={{ fontSize:'0.72rem',color:'var(--gold)',marginBottom:'10px' }}>ENDERGEBNIS</div>
+                  {[...(detailT.results||[])].sort((a,b)=>(a.place||99)-(b.place||99)).map(r => {
+                    const medal = r.place===1?'🥇':r.place===2?'🥈':r.place===3?'🥉':`#${r.place}`
+                    const payoutPlaces = (detailT.payouts||[]).filter(p=>p.pct>0).length
+                    const prize = r.place<=payoutPlaces && detailT.payouts?.[r.place-1]
+                      ? Math.round(realPot*detailT.payouts[r.place-1].pct/100) : 0
+                    const playerData = (detailT.players||[]).find(p=>p.name===r.name)
+                    const rebuys = playerData?.rebuys||0
+                    const itm = r.place <= payoutPlaces
+                    return (
+                      <div key={r.name} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'10px 12px',borderRadius:'8px',marginBottom:'6px',background:itm?'rgba(201,168,76,0.06)':'rgba(0,0,0,0.15)',border:`1px solid ${r.place===1?'rgba(201,168,76,0.3)':itm?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.05)'}` }}>
+                        <span style={{ fontSize:'1.1rem',minWidth:'24px' }}>{medal}</span>
+                        <Avatar name={r.name} avatars={avatars} size={30} />
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontWeight:600,fontSize:'0.9rem' }}>{r.name}</div>
+                          {rebuys>0 && <div style={{ fontSize:'0.65rem',color:'#f472b6' }}>{rebuys}× Rebuy</div>}
+                        </div>
+                        {prize>0
+                          ? <span className="font-display" style={{ color:'#4ade80',fontSize:'0.85rem' }}>+{formatEuro(prize)}</span>
+                          : <span style={{ fontSize:'0.7rem',color:'var(--text-muted)' }}>–</span>
+                        }
+                      </div>
+                    )
+                  })}
+
+                  {/* Players who didn't finish (no result entry) */}
+                  {(detailT.players||[]).filter(p=> !(detailT.results||[]).find(r=>r.name===p.name)).length > 0 && (
+                    <>
+                      <div className="font-display" style={{ fontSize:'0.65rem',color:'var(--text-muted)',letterSpacing:'0.1em',margin:'12px 0 6px' }}>WEITERE SPIELER</div>
+                      {(detailT.players||[]).filter(p=> !(detailT.results||[]).find(r=>r.name===p.name)).map(p=>(
+                        <div key={p.name} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'8px 12px',borderRadius:'8px',marginBottom:'4px',background:'rgba(0,0,0,0.1)',border:'1px solid rgba(255,255,255,0.04)' }}>
+                          <Avatar name={p.name} avatars={avatars} size={26} />
+                          <span style={{ flex:1,fontSize:'0.85rem',color:'var(--text-muted)' }}>{p.name}</span>
+                          {(p.rebuys||0)>0 && <span style={{ fontSize:'0.65rem',color:'#f472b6' }}>{p.rebuys}× Rebuy</span>}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </>
               )
-            })}
+            })()}
+
             <button className="btn-ghost" style={{ width:'100%',marginTop:'20px' }} onClick={()=>setDetailT(null)}>Schließen</button>
           </div>
         </div>
