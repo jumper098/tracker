@@ -116,7 +116,6 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
     setT(prev => {
       if (!prev) return prev
       const updated = typeof updater === 'function' ? updater(prev) : updater
-      // writeDb must NOT be called inside setState — schedule it outside
       setTimeout(() => writeDb(updated), 0)
       return updated
     })
@@ -191,23 +190,23 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   }
 
   function toggleTimer() {
-    setT(prev => {
-      if (!prev) return prev
-      const lvl = prev.timerLevel || 0
-      const totalSecs = (prev.blinds[lvl]?.duration || 20) * 60
-      let updated
-      if (prev.timerPaused) {
-        updated = { ...prev, timerPaused: false, timerStartedAt: Date.now() }
-        startTimer(updated)
-      } else {
-        const elapsed = totalSecs - calcRemaining(prev)
-        if (timerRef.current) clearInterval(timerRef.current)
-        updated = { ...prev, timerPaused: true, timerElapsed: elapsed, timerStartedAt: null }
-        setTimeLeft(calcRemaining(updated))
-      }
-      writeDb(updated)
-      return updated
-    })
+    const prev = tRef.current
+    if (!prev) return
+    const lvl = prev.timerLevel || 0
+    const totalSecs = (prev.blinds[lvl]?.duration || 20) * 60
+    let updated
+    if (prev.timerPaused) {
+      updated = { ...prev, timerPaused: false, timerStartedAt: Date.now() }
+      setT(updated)
+      startTimer(updated)
+    } else {
+      const elapsed = totalSecs - calcRemaining(prev)
+      if (timerRef.current) clearInterval(timerRef.current)
+      updated = { ...prev, timerPaused: true, timerElapsed: elapsed, timerStartedAt: null }
+      setT(updated)
+      setTimeLeft(calcRemaining(updated))
+    }
+    setTimeout(() => writeDb(updated), 0)
   }
 
   function advanceLevel(cur, nextLvl) {
