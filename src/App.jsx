@@ -14,7 +14,12 @@ import Turnier from './pages/Turnier'
 const DEFAULT_PLAYERS = []
 
 export default function App() {
-  const [tab, setTab] = useState('eintrag')
+  const [tab, setTab] = useState(() => localStorage.getItem('poker_tab') || 'eintrag')
+
+  function handleTabChange(newTab) {
+    localStorage.setItem('poker_tab', newTab)
+    setTab(newTab)
+  }
   const [sessions, setSessions] = useState([])
   const [tournaments, setTournaments] = useState([])
   const [players, setPlayers] = useState(() => {
@@ -27,6 +32,10 @@ export default function App() {
 
   useEffect(() => {
     loadAll()
+    // If a live tournament exists, jump to turnier tab automatically
+    db.from('live_tournament').select('id').eq('id', 'current').single()
+      .then(({ data }) => { if (data) handleTabChange('turnier') })
+      .catch(() => {})
     const channel = db.channel('poker_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'poker_sessions' }, loadSessions)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'poker_tournaments' }, loadTournaments)
@@ -159,7 +168,7 @@ export default function App() {
         )}
       </div>
 
-      <TabBar active={tab} onChange={setTab} />
+      <TabBar active={tab} onChange={handleTabChange} />
       <Toast />
 
       <style>{`
