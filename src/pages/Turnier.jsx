@@ -242,18 +242,17 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   }
 
   function eliminatePlayer(name) {
-    setT(prev => {
-      if (!prev) return prev
-      const remaining = prev.players.filter(p => !p.eliminated && p.name !== name)
-      const place = remaining.length + 1
-      const updated = {
-        ...prev,
-        players: prev.players.map(p => p.name === name ? { ...p, eliminated: true, place } : p),
-        results: [...(prev.results||[]).filter(r=>r.name!==name), { name, place }],
-      }
-      writeDb(updated)
-      return updated
-    })
+    const prev = tRef.current
+    if (!prev) return
+    const remaining = prev.players.filter(p => !p.eliminated && p.name !== name)
+    const place = remaining.length + 1
+    const updated = {
+      ...prev,
+      players: prev.players.map(p => p.name === name ? { ...p, eliminated: true, place } : p),
+      results: [...(prev.results||[]).filter(r=>r.name!==name), { name, place }],
+    }
+    setT(updated)
+    setTimeout(() => writeDb(updated), 0)
   }
 
   function rejoinPlayer(name) {
