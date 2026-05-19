@@ -3,9 +3,10 @@ import { db } from '../lib/supabase'
 import { formatEuroSign } from '../lib/helpers'
 import { showToast } from '../components/Toast'
 import Avatar from '../components/Avatar'
+import { calcYearBadges } from '../lib/badges'
 
 // ─── Live Session ────────────────────────────────────────────────────────────
-function LiveSession({ players, avatars = {}, onEnd, onBack }) {
+function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
   const [session, setSession] = useState(null)
   const [view, setView] = useState('setup') // setup | live
   const myId = useRef(Math.random().toString(36).slice(2))
@@ -276,6 +277,7 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
   const allCashedOut = session.players.every(p => p.cashout !== null)
   const cashoutSum = session.players.reduce((s, p) => s + (p.cashout || 0), 0)
   const diff = cashoutSum - totalPot
+  const yearBadges = calcYearBadges(sessions)
 
   return (
     <div>
@@ -317,6 +319,12 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                   <span style={{ fontWeight:600, fontSize:'0.95rem' }}>{p.name}</span>
+                  {(yearBadges[p.name] || []).map((b, i) => (
+                    <div key={i} style={{ display:'flex', flexDirection:'column', alignItems:'center', lineHeight:1, gap:'2px' }}>
+                      <span style={{ fontSize:'0.75rem' }}>{b.emoji}</span>
+                      <span style={{ fontSize:'0.55rem', color:'var(--text-muted)', fontFamily:'Cinzel,serif', fontWeight:600 }}>{b.year}</span>
+                    </div>
+                  ))}
                   {p.lateJoin && <span style={{ fontSize:'0.6rem', color:'#60a5fa', background:'rgba(96,165,250,0.12)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:'4px', padding:'1px 6px' }}>LATE</span>}
                 </div>
                 <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'2px' }}>
@@ -636,7 +644,7 @@ function ManualEntry({ players, onSessionAdded }) {
 }
 
 // ─── Main Eintrag ─────────────────────────────────────────────────────────────
-export default function Eintrag({ players, avatars = {}, onSessionAdded }) {
+export default function Eintrag({ players, avatars = {}, sessions = [], onSessionAdded }) {
   const [mode, setMode] = useState('home') // home | live | manual
   const [hasLive, setHasLive] = useState(false)
 
@@ -652,6 +660,7 @@ export default function Eintrag({ players, avatars = {}, onSessionAdded }) {
       <LiveSession
         players={players}
         avatars={avatars}
+        sessions={sessions}
         onEnd={() => { setHasLive(false); setMode('home'); onSessionAdded() }}
         onBack={() => setMode('home')}
       />
