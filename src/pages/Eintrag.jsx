@@ -1,15 +1,471 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { db } from '../lib/supabase'
 import { formatEuroSign } from '../lib/helpers'
 import { showToast } from '../components/Toast'
+import Avatar from '../components/Avatar'
 
-export default function Eintrag({ players, onSessionAdded }) {
+// ─── Live Session ────────────────────────────────────────────────────────────
+function LiveSession({ players, avatars = {}, onEnd, onBack }) {
+  const [session, setSession] = useState(null)
+  const [view, setView] = useState('setup') // setup | live
+  const myId = useRef(Math.random().toString(36).slice(2))
+  const sessionRef = useRef(null)
+  const timerRef = useRef(null)
+  const [elapsed, setElapsed] = useState(0)
+
+  // Setup state
+  const today = new Date().toISOString().split('T')[0]
+  const [sName, setSName] = useState('Poker Abend')
+  const [sDate, setSDate] = useState(today)
+  const [sBuyin, setSBuyin] = useState('20')
+  const [sPlayers, setSPlayers] = useState([])
+
+  // Modals
+  const [rebuyModal, setRebuyModal] = useState(null) // player name
+  const [cashoutModal, setCashoutModal] = useState(null) // player name
+  const [cashoutValue, setCashoutValue] = useState('')
+  const [lateJoinModal, setLateJoinModal] = useState(false)
+  const [lateJoinPlayer, setLateJoinPlayer] = useState('')
+  const [endConfirm, setEndConfirm] = useState(false)
+
+  // Load existing session on mount
+  useEffect(() => {
+    db.from('live_session').select('data').eq('id', 'current').single()
+      .then(({ data }) => {
+        if (data?.data?.session) {
+          const s = data.data.session
+          sessionRef.current = s
+          setSession(s)
+          setView('live')
+          startTimer(s.startedAt)
+        }
+      }).catch(() => {})
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [])
+
+  function startTimer(startedAt) {
+    if (timerRef.current) clearInterval(timerRef.current)
+    timerRef.current = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startedAt) / 1000))
+    }, 1000)
+  }
+
+  function formatElapsed(secs) {
+    const h = Math.floor(secs / 3600)
+    const m = Math.floor((secs % 3600) / 60)
+    const s = secs % 60
+    if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+  }
+
+  async function writeDb(s) {
+    try {
+      await db.from('live_session').upsert(
+        { id: 'current', data: { session: s, writerId: myId.current }, updated_at: new Date().toISOString() },
+        { onConflict: 'id' }
+      )
+    } catch (_) {}
+  }
+
+  function updateSession(updater) {
+    const prev = sessionRef.current
+    if (!prev) return
+    const updated = typeof updater === 'function' ? updater(prev) : updater
+    sessionRef.current = updated
+    setSession(updated)
+    setTimeout(() => writeDb(updated), 0)
+  }
+
+  // Realtime listener
+  useEffect(() => {
+    const channel = db.channel('live_session_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_session' }, payload => {
+        const d = payload.new?.data
+        if (!d || d.writerId === myId.current) return
+        if (d.session) {
+          sessionRef.current = d.session
+          setSession(d.session)
+          if (view !== 'live') setView('live')
+        }
+      })
+      .subscribe()
+    return () => db.removeChannel(channel)
+  }, [view])
+
+  function startSession() {
+    if (!sName || !sBuyin || sPlayers.length < 2) {
+      showToast('⚠ Name, Buy-In und mind. 2 Spieler erforderlich'); return
+    }
+    const buyin = parseFloat(sBuyin)
+    const startedAt = Date.now()
+    const newSession = {
+      name: sName,
+      date: sDate,
+      buyin,
+      startedAt,
+      players: sPlayers.map(name => ({
+        name,
+        buyin,
+        rebuys: [],
+        cashout: null,
+        joinedAt: startedAt,
+      }))
+    }
+    sessionRef.current = newSession
+    setSession(newSession)
+    setView('live')
+    startTimer(startedAt)
+    writeDb(newSession)
+    showToast('♠ Session gestartet!')
+  }
+
+  function addRebuy(playerName) {
+    updateSession(prev => ({
+      ...prev,
+      players: prev.players.map(p => p.name === playerName
+        ? { ...p, rebuys: [...p.rebuys, prev.buyin] }
+        : p
+      )
+    }))
+    setRebuyModal(null)
+    showToast(`↺ Rebuy für ${playerName}`)
+  }
+
+  function setCashout(playerName, value) {
+    const amount = parseFloat(value)
+    if (isNaN(amount) || amount < 0) { showToast('⚠ Ungültiger Betrag'); return }
+    updateSession(prev => ({
+      ...prev,
+      players: prev.players.map(p => p.name === playerName ? { ...p, cashout: amount } : p)
+    }))
+    setCashoutModal(null)
+    setCashoutValue('')
+    showToast(`✓ Cash-Out für ${playerName}: ${amount}€`)
+  }
+
+  function removeCashout(playerName) {
+    updateSession(prev => ({
+      ...prev,
+      players: prev.players.map(p => p.name === playerName ? { ...p, cashout: null } : p)
+    }))
+  }
+
+  function lateJoin() {
+    if (!lateJoinPlayer) return
+    const s = sessionRef.current
+    if (!s) return
+    if (s.players.find(p => p.name === lateJoinPlayer)) {
+      showToast('⚠ Spieler bereits dabei'); return
+    }
+    updateSession(prev => ({
+      ...prev,
+      players: [...prev.players, {
+        name: lateJoinPlayer,
+        buyin: prev.buyin,
+        rebuys: [],
+        cashout: null,
+        joinedAt: Date.now(),
+        lateJoin: true,
+      }]
+    }))
+    setLateJoinModal(false)
+    setLateJoinPlayer('')
+    showToast(`✓ ${lateJoinPlayer} ist dazugekommen`)
+  }
+
+  async function endSession() {
+    const s = sessionRef.current
+    if (!s) return
+    // Check all cashed out
+    const missing = s.players.filter(p => p.cashout === null).map(p => p.name)
+    if (missing.length > 0) {
+      showToast(`⚠ Cash-Out fehlt: ${missing.join(', ')}`); return
+    }
+    // Save all players as individual sessions
+    const inserts = s.players.map(p => {
+      const totalBuyin = p.buyin + p.rebuys.reduce((a, r) => a + r, 0)
+      return {
+        date: s.date,
+        player_name: p.name,
+        buy_in: totalBuyin,
+        cash_out: p.cashout,
+        rebuys: p.rebuys.reduce((a, r) => a + r, 0),
+        rebuy_count: p.rebuys.length,
+        session_name: s.name,
+      }
+    })
+    const { error } = await db.from('poker_sessions').insert(inserts)
+    if (error) { showToast('Fehler: ' + error.message); return }
+    await db.from('live_session').delete().eq('id', 'current')
+    if (timerRef.current) clearInterval(timerRef.current)
+    showToast('✓ Session gespeichert!')
+    onEnd()
+  }
+
+  // ── SETUP VIEW ──────────────────────────────────────────────────────────────
+  if (view === 'setup') return (
+    <div>
+      <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'20px' }}>
+        <button onClick={onBack} className="btn-ghost" style={{ padding:'8px 14px', fontSize:'0.75rem' }}>← Zurück</button>
+        <div className="font-display" style={{ fontSize:'0.9rem', color:'var(--gold)' }}>LIVE SESSION</div>
+      </div>
+
+      <div className="card" style={{ marginBottom:'16px' }}>
+        <div style={{ marginBottom:'14px' }}>
+          <label className="section-label">Session Name</label>
+          <input className="input-field" value={sName} onChange={e => setSName(e.target.value)} placeholder="Poker Abend" />
+        </div>
+        <div style={{ marginBottom:'14px' }}>
+          <label className="section-label">Datum</label>
+          <input className="input-field" type="date" value={sDate} onChange={e => setSDate(e.target.value)}
+            style={{ width:'100%', colorScheme:'dark', boxSizing:'border-box' }} />
+        </div>
+        <div style={{ marginBottom:'14px' }}>
+          <label className="section-label">Buy-In (€) — gilt für alle</label>
+          <input className="input-field" type="number" value={sBuyin} onChange={e => setSBuyin(e.target.value)}
+            placeholder="20" min="0" step="0.5" />
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom:'16px' }}>
+        <div className="font-display" style={{ fontSize:'0.72rem', color:'var(--gold)', marginBottom:'12px' }}>
+          SPIELER AUSWÄHLEN ({sPlayers.length})
+        </div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
+          {players.map(name => {
+            const sel = sPlayers.includes(name)
+            return (
+              <button key={name} onClick={() => setSPlayers(prev => sel ? prev.filter(p => p !== name) : [...prev, name])}
+                style={{ display:'flex', alignItems:'center', gap:'7px', padding:'7px 14px', borderRadius:'20px', cursor:'pointer', fontSize:'0.85rem',
+                  border:`1px solid ${sel ? 'rgba(201,168,76,0.6)' : 'rgba(255,255,255,0.1)'}`,
+                  background: sel ? 'rgba(201,168,76,0.15)' : 'transparent',
+                  color: sel ? 'var(--gold)' : 'var(--text-muted)' }}>
+                <Avatar name={name} avatars={avatars} size={22} />
+                {sel ? '✓ ' : ''}{name}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <button className="btn-gold" style={{ width:'100%', fontSize:'1rem', padding:'16px' }} onClick={startSession}>
+        ▶ SESSION STARTEN
+      </button>
+    </div>
+  )
+
+  // ── LIVE VIEW ───────────────────────────────────────────────────────────────
+  if (!session) return null
+  const totalPot = session.players.reduce((s, p) => s + p.buyin + p.rebuys.reduce((a,r) => a+r, 0), 0)
+  const allCashedOut = session.players.every(p => p.cashout !== null)
+  const cashoutSum = session.players.reduce((s, p) => s + (p.cashout || 0), 0)
+  const diff = cashoutSum - totalPot
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px',
+        padding:'12px 14px', borderRadius:'12px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
+        <div>
+          <div className="font-display" style={{ fontSize:'0.8rem', color:'var(--gold)' }}>{session.name}</div>
+          <div style={{ fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'2px' }}>{session.date}</div>
+        </div>
+        <div style={{ textAlign:'center' }}>
+          <div style={{ fontFamily:'Cinzel,serif', fontSize:'1.4rem', color:'#4ade80', letterSpacing:'0.05em' }}>
+            ⏱ {formatElapsed(elapsed)}
+          </div>
+          <div style={{ fontSize:'0.6rem', color:'var(--text-muted)' }}>LAUFZEIT</div>
+        </div>
+        <div style={{ textAlign:'right' }}>
+          <div className="font-display" style={{ fontSize:'1rem', color:'var(--gold)' }}>{totalPot}€</div>
+          <div style={{ fontSize:'0.6rem', color:'var(--text-muted)' }}>GESAMTPOT</div>
+        </div>
+      </div>
+
+      {/* Player cards */}
+      {session.players.map(p => {
+        const totalBuyin = p.buyin + p.rebuys.reduce((a,r) => a+r, 0)
+        const profit = p.cashout !== null ? p.cashout - totalBuyin : null
+        const hasCashout = p.cashout !== null
+        return (
+          <div key={p.name} className="card" style={{ marginBottom:'10px', padding:'14px 16px',
+            border:`1px solid ${hasCashout ? 'rgba(74,222,128,0.25)' : 'rgba(255,255,255,0.07)'}`,
+            background: hasCashout ? 'rgba(74,222,128,0.04)' : undefined }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+              <Avatar name={p.name} avatars={avatars} size={38} />
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                  <span style={{ fontWeight:600, fontSize:'0.95rem' }}>{p.name}</span>
+                  {p.lateJoin && <span style={{ fontSize:'0.6rem', color:'#60a5fa', background:'rgba(96,165,250,0.12)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:'4px', padding:'1px 6px' }}>LATE</span>}
+                </div>
+                <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'2px' }}>
+                  Buy-In: {totalBuyin}€
+                  {p.rebuys.length > 0 && <span style={{ color:'#f472b6', marginLeft:'6px' }}>{p.rebuys.length}× Rebuy</span>}
+                </div>
+              </div>
+
+              {/* Right side */}
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'6px' }}>
+                {hasCashout ? (
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                    <div style={{ textAlign:'right' }}>
+                      <div className="font-display" style={{ fontSize:'0.9rem', color:'#4ade80' }}>{p.cashout}€</div>
+                      <div style={{ fontSize:'0.7rem', color: profit > 0 ? '#4ade80' : profit < 0 ? '#f87171' : 'var(--text-muted)' }}>
+                        {profit > 0 ? '+' : ''}{profit}€
+                      </div>
+                    </div>
+                    <button onClick={() => removeCashout(p.name)}
+                      style={{ width:'24px', height:'24px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.05)', color:'var(--text-muted)', fontSize:'0.75rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setCashoutModal(p.name); setCashoutValue('') }}
+                    style={{ padding:'7px 14px', borderRadius:'8px', border:'1px solid rgba(74,222,128,0.4)', background:'rgba(74,222,128,0.1)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.7rem', cursor:'pointer' }}>
+                    Cash-Out
+                  </button>
+                )}
+                <button onClick={() => setRebuyModal(p.name)}
+                  style={{ padding:'5px 12px', borderRadius:'7px', border:'1px solid rgba(244,114,182,0.35)', background:'rgba(244,114,182,0.08)', color:'#f472b6', fontFamily:'Cinzel,serif', fontSize:'0.65rem', cursor:'pointer' }}>
+                  + Rebuy
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })}
+
+      {/* Pot balance */}
+      {allCashedOut && (
+        <div style={{ marginBottom:'12px', padding:'12px 16px', borderRadius:'10px',
+          background: Math.abs(diff) < 0.01 ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)',
+          border: `1px solid ${Math.abs(diff) < 0.01 ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}` }}>
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:'0.8rem' }}>
+            <span style={{ color:'var(--text-muted)' }}>Pot: {totalPot}€ · Cash-Outs: {cashoutSum}€</span>
+            <span style={{ color: Math.abs(diff) < 0.01 ? '#4ade80' : '#f87171', fontFamily:'Cinzel,serif' }}>
+              {Math.abs(diff) < 0.01 ? '✓ Ausgeglichen' : `Differenz: ${diff > 0 ? '+' : ''}${diff.toFixed(2)}€`}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ display:'flex', gap:'10px', marginBottom:'12px' }}>
+        <button onClick={() => setLateJoinModal(true)} className="btn-ghost" style={{ flex:1, fontSize:'0.75rem', color:'#60a5fa', borderColor:'rgba(96,165,250,0.35)' }}>
+          + Late Join
+        </button>
+        <button onClick={() => setEndConfirm(true)}
+          style={{ flex:2, padding:'13px', borderRadius:'10px', border:'1px solid rgba(201,168,76,0.4)', background:'rgba(201,168,76,0.12)', color:'var(--gold)', fontFamily:'Cinzel,serif', fontSize:'0.8rem', cursor:'pointer', letterSpacing:'0.08em' }}>
+          ✓ SESSION BEENDEN
+        </button>
+      </div>
+
+      {/* Rebuy Modal */}
+      {rebuyModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
+          onClick={() => setRebuyModal(null)}>
+          <div className="card" style={{ maxWidth:'320px', width:'100%', padding:'24px', textAlign:'center' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:'2rem', marginBottom:'8px' }}>↺</div>
+            <div className="font-display" style={{ fontSize:'0.85rem', color:'#f472b6', marginBottom:'4px' }}>REBUY BESTÄTIGEN</div>
+            <div style={{ fontSize:'1rem', marginBottom:'4px' }}>{rebuyModal}</div>
+            <div style={{ fontSize:'0.8rem', color:'var(--text-muted)', marginBottom:'24px' }}>+{session.buyin}€</div>
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button className="btn-ghost" style={{ flex:1 }} onClick={() => setRebuyModal(null)}>Abbrechen</button>
+              <button onClick={() => addRebuy(rebuyModal)}
+                style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(244,114,182,0.4)', background:'rgba(244,114,182,0.12)', color:'#f472b6', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
+                ✓ Bestätigen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cash-Out Modal */}
+      {cashoutModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
+          onClick={() => setCashoutModal(null)}>
+          <div className="card" style={{ maxWidth:'320px', width:'100%', padding:'24px' }} onClick={e => e.stopPropagation()}>
+            <div className="font-display" style={{ fontSize:'0.85rem', color:'#4ade80', marginBottom:'6px' }}>💰 CASH-OUT</div>
+            <div style={{ fontSize:'1rem', marginBottom:'16px' }}>{cashoutModal}</div>
+            <label className="section-label">Betrag (€)</label>
+            <input className="input-field" type="number" value={cashoutValue}
+              onChange={e => setCashoutValue(e.target.value)}
+              onFocus={e => e.target.select()}
+              placeholder="0" min="0" step="0.5" autoFocus
+              style={{ fontSize:'1.4rem', textAlign:'center', marginBottom:'16px' }} />
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button className="btn-ghost" style={{ flex:1 }} onClick={() => setCashoutModal(null)}>Abbrechen</button>
+              <button onClick={() => setCashout(cashoutModal, cashoutValue)}
+                style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(74,222,128,0.4)', background:'rgba(74,222,128,0.12)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
+                ✓ Bestätigen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Late Join Modal */}
+      {lateJoinModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
+          onClick={() => setLateJoinModal(false)}>
+          <div className="card" style={{ maxWidth:'320px', width:'100%', padding:'24px' }} onClick={e => e.stopPropagation()}>
+            <div className="font-display" style={{ fontSize:'0.85rem', color:'#60a5fa', marginBottom:'16px' }}>🚪 LATE JOIN</div>
+            <label className="section-label">Spieler</label>
+            <select className="input-field" value={lateJoinPlayer} onChange={e => setLateJoinPlayer(e.target.value)} style={{ marginBottom:'16px' }}>
+              <option value="">— Spieler auswählen —</option>
+              {players.filter(p => !session.players.find(sp => sp.name === p)).map(p =>
+                <option key={p} value={p}>{p}</option>
+              )}
+            </select>
+            <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', marginBottom:'16px' }}>
+              Buy-In: {session.buyin}€
+            </div>
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button className="btn-ghost" style={{ flex:1 }} onClick={() => setLateJoinModal(false)}>Abbrechen</button>
+              <button onClick={lateJoin}
+                style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(96,165,250,0.4)', background:'rgba(96,165,250,0.12)', color:'#60a5fa', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
+                ✓ Dazukommen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* End Confirm Modal */}
+      {endConfirm && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
+          onClick={() => setEndConfirm(false)}>
+          <div className="card" style={{ maxWidth:'320px', width:'100%', padding:'24px', textAlign:'center' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:'2rem', marginBottom:'8px' }}>♠</div>
+            <div className="font-display" style={{ fontSize:'0.85rem', color:'var(--gold)', marginBottom:'8px' }}>SESSION BEENDEN?</div>
+            {session.players.filter(p => p.cashout === null).length > 0 && (
+              <div style={{ fontSize:'0.8rem', color:'#f87171', marginBottom:'12px' }}>
+                ⚠ Cash-Out fehlt: {session.players.filter(p => p.cashout === null).map(p => p.name).join(', ')}
+              </div>
+            )}
+            <div style={{ fontSize:'0.8rem', color:'var(--text-muted)', marginBottom:'24px' }}>
+              {session.players.length} Spieler · {totalPot}€ Pot
+            </div>
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button className="btn-ghost" style={{ flex:1 }} onClick={() => setEndConfirm(false)}>Abbrechen</button>
+              <button onClick={() => { setEndConfirm(false); endSession() }}
+                style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(201,168,76,0.4)', background:'rgba(201,168,76,0.12)', color:'var(--gold)', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
+                ✓ Speichern
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Manual Entry ────────────────────────────────────────────────────────────
+function ManualEntry({ players, onSessionAdded }) {
   const today = new Date().toISOString().split('T')[0]
   const [date, setDate] = useState(today)
   const [player, setPlayer] = useState('')
   const [buyin, setBuyin] = useState('')
   const [cashout, setCashout] = useState('')
-  const [rebuys, setRebuys] = useState([]) // array of amounts
+  const [rebuys, setRebuys] = useState([])
   const [showRebuyDialog, setShowRebuyDialog] = useState(false)
   const [rebuyAmounts, setRebuyAmounts] = useState(['20', '0'])
   const [loading, setLoading] = useState(false)
@@ -18,17 +474,10 @@ export default function Eintrag({ players, onSessionAdded }) {
   const profit = parseFloat(cashout || 0) - totalBuyin
   const showPreview = buyin !== '' && cashout !== ''
 
-  function openRebuyDialog() {
-    setRebuyAmounts(['20', '0'])
-    setShowRebuyDialog(true)
-  }
+  function openRebuyDialog() { setRebuyAmounts(['20', '0']); setShowRebuyDialog(true) }
   function confirmRebuy() {
-    const newRebuys = rebuyAmounts
-      .map(r => parseFloat(r))
-      .filter(r => !isNaN(r) && r > 0)
-    if (newRebuys.length > 0) {
-      setRebuys(prev => [...prev, ...newRebuys])
-    }
+    const newRebuys = rebuyAmounts.map(r => parseFloat(r)).filter(r => !isNaN(r) && r > 0)
+    if (newRebuys.length > 0) setRebuys(prev => [...prev, ...newRebuys])
     setShowRebuyDialog(false)
   }
   function removeRebuy(i) { setRebuys(rebuys.filter((_, idx) => idx !== i)) }
@@ -38,197 +487,176 @@ export default function Eintrag({ players, onSessionAdded }) {
       showToast('⚠ Bitte alle Felder ausfüllen'); return
     }
     setLoading(true)
-    const rebuyCount = rebuys.length
     const rebuyTotal = rebuys.reduce((s, r) => s + r, 0)
-
     const { error } = await db.from('poker_sessions').insert([{
-      date,
-      player_name: player,
-      buy_in: totalBuyin,
-      cash_out: parseFloat(cashout),
-      rebuys: rebuyTotal,
-      rebuy_count: rebuyCount,
+      date, player_name: player, buy_in: totalBuyin,
+      cash_out: parseFloat(cashout), rebuys: rebuyTotal, rebuy_count: rebuys.length,
     }])
     setLoading(false)
     if (error) { showToast('Fehler: ' + error.message); return }
-    showToast('✓ Eintrag gespeichert!' + (rebuyTotal > 0 ? ` (inkl. ${rebuyTotal.toFixed(2)} € Rebuy)` : ''))
+    showToast('✓ Eintrag gespeichert!')
     setPlayer(''); setBuyin(''); setCashout(''); setRebuys([])
     onSessionAdded()
   }
 
   return (
-    <div style={{ padding: '20px 16px 100px' }}>
-      {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: '24px', paddingTop: '12px' }}>
-        <div className="font-display" style={{ fontSize: '1.3rem', color: 'var(--gold)', letterSpacing: '0.15em' }}>
-          ♠ EINTRAG
-        </div>
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-          Session hinzufügen
-        </div>
+    <div>
+      <div className="font-display" style={{ fontSize:'0.72rem', color:'var(--text-muted)', letterSpacing:'0.12em', marginBottom:'12px' }}>
+        MANUELLER EINTRAG
       </div>
-
-      <div className="card" style={{ marginBottom: '16px' }}>
-        {/* Date */}
-        <div style={{ marginBottom: '16px' }}>
+      <div className="card" style={{ marginBottom:'16px' }}>
+        <div style={{ marginBottom:'14px' }}>
           <label className="section-label">Datum</label>
-          <input
-            className="input-field"
-            type="date"
-            value={date}
-            onChange={e => setDate(e.target.value)}
-            style={{
-              width: '100%',
-              display: 'block',
-              colorScheme: 'dark',
-              boxSizing: 'border-box',
-              WebkitAppearance: 'none',
-              appearance: 'none',
-            }}
-          />
+          <input className="input-field" type="date" value={date} onChange={e => setDate(e.target.value)}
+            style={{ width:'100%', colorScheme:'dark', boxSizing:'border-box' }} />
         </div>
-
-        {/* Player */}
-        <div style={{ marginBottom: '16px' }}>
+        <div style={{ marginBottom:'14px' }}>
           <label className="section-label">Spieler</label>
           <select className="input-field" value={player} onChange={e => setPlayer(e.target.value)}>
             <option value="">— Spieler auswählen —</option>
             {players.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-
-        {/* Buy-in */}
-        <div style={{ marginBottom: '16px' }}>
+        <div style={{ marginBottom:'14px' }}>
           <label className="section-label">Buy-In (€)</label>
-          <input
-            className="input-field" type="number" placeholder="0.00" step="0.01" min="0"
-            value={buyin} onChange={e => setBuyin(e.target.value)}
-          />
+          <input className="input-field" type="number" placeholder="0.00" step="0.01" min="0"
+            value={buyin} onChange={e => setBuyin(e.target.value)} />
         </div>
-
-        {/* Rebuys */}
         {rebuys.length > 0 && (
-          <div style={{ marginBottom: '12px' }}>
+          <div style={{ marginBottom:'12px' }}>
             <label className="section-label">Rebuys ({rebuys.length}×)</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
               {rebuys.map((r, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  background: 'rgba(244,114,182,0.08)', border: '1px solid rgba(244,114,182,0.3)',
-                  borderRadius: '20px', padding: '4px 10px 4px 12px',
-                }}>
-                  <span style={{ fontFamily: 'Cinzel, serif', fontSize: '0.8rem', color: '#f472b6' }}>
-                    {r.toFixed(2)}€
-                  </span>
-                  <button onClick={() => removeRebuy(i)} style={{
-                    background: 'none', border: 'none', color: 'rgba(244,114,182,0.6)',
-                    cursor: 'pointer', fontSize: '0.85rem', lineHeight: 1, padding: 0,
-                  }}>✕</button>
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:'6px', background:'rgba(244,114,182,0.08)', border:'1px solid rgba(244,114,182,0.3)', borderRadius:'20px', padding:'4px 10px 4px 12px' }}>
+                  <span style={{ fontFamily:'Cinzel,serif', fontSize:'0.8rem', color:'#f472b6' }}>{r.toFixed(2)}€</span>
+                  <button onClick={() => removeRebuy(i)} style={{ background:'none', border:'none', color:'rgba(244,114,182,0.6)', cursor:'pointer', fontSize:'0.85rem', padding:0 }}>✕</button>
                 </div>
               ))}
             </div>
           </div>
         )}
-
-        <button onClick={openRebuyDialog} className="btn-ghost" style={{ width: '100%', marginBottom: '16px', fontSize: '0.7rem', borderColor: 'rgba(244,114,182,0.3)', color: '#f472b6' }}>
+        <button onClick={openRebuyDialog} className="btn-ghost" style={{ width:'100%', marginBottom:'14px', fontSize:'0.7rem', borderColor:'rgba(244,114,182,0.3)', color:'#f472b6' }}>
           + REBUY HINZUFÜGEN
         </button>
-
-        {/* Cash-out */}
-        <div style={{ marginBottom: '20px' }}>
+        <div style={{ marginBottom:'16px' }}>
           <label className="section-label">Cash-Out (€)</label>
-          <input
-            className="input-field" type="number" placeholder="0.00" step="0.01" min="0"
-            value={cashout} onChange={e => setCashout(e.target.value)}
-          />
+          <input className="input-field" type="number" placeholder="0.00" step="0.01" min="0"
+            value={cashout} onChange={e => setCashout(e.target.value)} />
         </div>
-
-        {/* Profit preview */}
         {showPreview && (
-          <div style={{
-            background: 'rgba(0,0,0,0.2)',
-            borderRadius: '10px',
-            padding: '14px 16px',
-            marginBottom: '20px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            border: '1px solid rgba(201,168,76,0.1)',
-          }}>
+          <div style={{ background:'rgba(0,0,0,0.2)', borderRadius:'10px', padding:'14px 16px', marginBottom:'16px', display:'flex', justifyContent:'space-between', alignItems:'center', border:'1px solid rgba(201,168,76,0.1)' }}>
             <div>
-              <div className="section-label" style={{ marginBottom: '2px' }}>Total Buy-In</div>
-              <div style={{ color: 'var(--text-primary)' }}>{totalBuyin.toFixed(2)} €</div>
+              <div className="section-label" style={{ marginBottom:'2px' }}>Total Buy-In</div>
+              <div style={{ color:'var(--text-primary)' }}>{totalBuyin.toFixed(2)} €</div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div className="section-label" style={{ marginBottom: '2px' }}>Profit / Verlust</div>
+            <div style={{ textAlign:'right' }}>
+              <div className="section-label" style={{ marginBottom:'2px' }}>Profit / Verlust</div>
               <div className={`font-display ${profit > 0 ? 'profit-pos' : profit < 0 ? 'profit-neg' : 'profit-neu'}`}
-                style={{ fontSize: '1.1rem', letterSpacing: '0.05em' }}>
-                {formatEuroSign(profit)}
-              </div>
+                style={{ fontSize:'1.1rem' }}>{formatEuroSign(profit)}</div>
             </div>
           </div>
         )}
-
-        <button className="btn-gold" style={{ width: '100%' }} onClick={handleSubmit} disabled={loading}>
+        <button className="btn-gold" style={{ width:'100%' }} onClick={handleSubmit} disabled={loading}>
           {loading ? '…' : '♠ Eintrag speichern'}
         </button>
       </div>
 
-      {/* Rebuy Dialog */}
       {showRebuyDialog && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 500, padding: '20px',
-        }} onClick={() => setShowRebuyDialog(false)}>
-          <div className="card" style={{ maxWidth: '320px', width: '100%', padding: '24px' }}
-            onClick={e => e.stopPropagation()}>
-            <div className="font-display" style={{ fontSize: '0.9rem', color: '#f472b6', letterSpacing: '0.1em', marginBottom: '6px' }}>
-              🔄 REBUY HINZUFÜGEN
-            </div>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
-              Rebuy {rebuys.length + 1} für <strong style={{ color: 'var(--text-primary)' }}>{player || '—'}</strong>
-            </div>
-
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '14px' }}>
-              Felder leer lassen wenn kein weiterer Rebuy
-            </div>
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
+          onClick={() => setShowRebuyDialog(false)}>
+          <div className="card" style={{ maxWidth:'320px', width:'100%', padding:'24px' }} onClick={e => e.stopPropagation()}>
+            <div className="font-display" style={{ fontSize:'0.9rem', color:'#f472b6', marginBottom:'16px' }}>🔄 REBUY HINZUFÜGEN</div>
             {rebuyAmounts.map((amt, i) => (
-              <div key={i} style={{ marginBottom: '10px' }}>
+              <div key={i} style={{ marginBottom:'10px' }}>
                 <label className="section-label">Rebuy {rebuys.length + i + 1} (€)</label>
-                <input
-                  className="input-field"
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="0"
-                  value={amt}
+                <input className="input-field" type="text" inputMode="decimal" placeholder="0" value={amt}
                   onChange={e => setRebuyAmounts(prev => prev.map((v, idx) => idx === i ? e.target.value : v))}
-                  onFocus={e => e.target.select()}
-                  autoFocus={i === 0}
-                  style={{ textAlign: 'center', fontSize: '1.1rem' }}
-                />
+                  onFocus={e => e.target.select()} autoFocus={i === 0} style={{ textAlign:'center', fontSize:'1.1rem' }} />
               </div>
             ))}
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', marginBottom: '12px' }}>
-              Standard 20€ — Betrag anpassen falls nötig
-            </div>
-            <button className="btn-ghost" style={{ width: '100%', marginBottom: '16px', fontSize: '0.68rem' }}
-              onClick={() => setRebuyAmounts(prev => [...prev, ''])}>
-              + Noch einen hinzufügen
-            </button>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button className="btn-ghost" style={{ flex: 1 }} onClick={() => setShowRebuyDialog(false)}>
-                Abbrechen
-              </button>
-              <button className="btn-gold" style={{ flex: 1, borderColor: 'rgba(244,114,182,0.5)', background: 'rgba(244,114,182,0.15)', color: '#f472b6' }}
-                onClick={confirmRebuy}>
-                ✓ Bestätigen
-              </button>
+            <button className="btn-ghost" style={{ width:'100%', marginBottom:'12px', fontSize:'0.68rem' }}
+              onClick={() => setRebuyAmounts(prev => [...prev, ''])}>+ Noch einen</button>
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button className="btn-ghost" style={{ flex:1 }} onClick={() => setShowRebuyDialog(false)}>Abbrechen</button>
+              <button className="btn-gold" style={{ flex:1, borderColor:'rgba(244,114,182,0.5)', background:'rgba(244,114,182,0.15)', color:'#f472b6' }} onClick={confirmRebuy}>✓</button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Main Eintrag ─────────────────────────────────────────────────────────────
+export default function Eintrag({ players, avatars = {}, onSessionAdded }) {
+  const [mode, setMode] = useState('home') // home | live | manual
+  const [hasLive, setHasLive] = useState(false)
+
+  // Check if live session exists
+  useEffect(() => {
+    db.from('live_session').select('id').eq('id', 'current').single()
+      .then(({ data }) => { if (data) setHasLive(true) })
+      .catch(() => {})
+  }, [])
+
+  if (mode === 'live') return (
+    <div style={{ padding:'20px 16px 100px' }}>
+      <LiveSession
+        players={players}
+        avatars={avatars}
+        onEnd={() => { setHasLive(false); setMode('home'); onSessionAdded() }}
+        onBack={() => setMode('home')}
+      />
+    </div>
+  )
+
+  if (mode === 'manual') return (
+    <div style={{ padding:'20px 16px 100px' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'20px' }}>
+        <button onClick={() => setMode('home')} className="btn-ghost" style={{ padding:'8px 14px', fontSize:'0.75rem' }}>← Zurück</button>
+        <div className="font-display" style={{ fontSize:'0.9rem', color:'var(--gold)' }}>MANUELLER EINTRAG</div>
+      </div>
+      <ManualEntry players={players} onSessionAdded={() => { onSessionAdded(); setMode('home') }} />
+    </div>
+  )
+
+  // Home
+  return (
+    <div style={{ padding:'20px 16px 100px' }}>
+      <div style={{ textAlign:'center', marginBottom:'32px', paddingTop:'12px' }}>
+        <div className="font-display" style={{ fontSize:'1.3rem', color:'var(--gold)', letterSpacing:'0.15em' }}>♠ EINTRAG</div>
+      </div>
+
+      {/* Live session banner if exists */}
+      {hasLive && (
+        <div style={{ marginBottom:'16px', padding:'14px 16px', borderRadius:'12px', background:'rgba(74,222,128,0.08)', border:'1px solid rgba(74,222,128,0.3)', display:'flex', alignItems:'center', gap:'12px' }}>
+          <div style={{ fontSize:'1.2rem' }}>🟢</div>
+          <div style={{ flex:1 }}>
+            <div className="font-display" style={{ fontSize:'0.75rem', color:'#4ade80' }}>SESSION LÄUFT</div>
+            <div style={{ fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'2px' }}>Tippe auf Fortsetzen um weiterzumachen</div>
+          </div>
+          <button onClick={() => setMode('live')} style={{ padding:'9px 16px', borderRadius:'8px', border:'1px solid rgba(74,222,128,0.5)', background:'rgba(74,222,128,0.15)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.7rem', cursor:'pointer' }}>
+            ▶ FORTSETZEN
+          </button>
+        </div>
+      )}
+
+      {/* Main button */}
+      <button onClick={() => setMode('live')}
+        style={{ width:'100%', padding:'24px', borderRadius:'16px', border:'2px solid rgba(201,168,76,0.4)', background:'rgba(201,168,76,0.08)', color:'var(--gold)', fontFamily:'Cinzel,serif', fontSize:'1.1rem', letterSpacing:'0.12em', cursor:'pointer', marginBottom:'16px', display:'flex', alignItems:'center', justifyContent:'center', gap:'12px' }}>
+        ▶ LIVE SESSION STARTEN
+      </button>
+
+      {/* Divider */}
+      <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px', marginTop:'8px' }}>
+        <div style={{ flex:1, height:'1px', background:'rgba(255,255,255,0.07)' }} />
+        <div style={{ fontSize:'0.65rem', color:'var(--text-muted)', fontFamily:'Cinzel,serif', letterSpacing:'0.1em' }}>ODER</div>
+        <div style={{ flex:1, height:'1px', background:'rgba(255,255,255,0.07)' }} />
+      </div>
+
+      <button onClick={() => setMode('manual')} className="btn-ghost" style={{ width:'100%', fontSize:'0.8rem' }}>
+        ✏️ Manuell eintragen
+      </button>
     </div>
   )
 }
