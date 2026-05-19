@@ -195,6 +195,7 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
     if (missing.length > 0) {
       showToast(`⚠ Cash-Out fehlt: ${missing.join(', ')}`); return
     }
+    const durationSeconds = Math.floor((Date.now() - s.startedAt) / 1000)
     // Save all players as individual sessions
     const inserts = s.players.map(p => {
       const totalBuyin = p.buyin + p.rebuys.reduce((a, r) => a + r, 0)
@@ -206,6 +207,7 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
         rebuys: p.rebuys.reduce((a, r) => a + r, 0),
         rebuy_count: p.rebuys.length,
         session_name: s.name,
+        session_duration: durationSeconds,
       }
     })
     const { error } = await db.from('poker_sessions').insert(inserts)
