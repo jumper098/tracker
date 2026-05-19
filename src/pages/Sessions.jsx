@@ -36,6 +36,18 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
   const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a))
   const yearBadges = calcYearBadges(sessions)
 
+  // Ranglisten-Medaillen: Top 3 by profit (filtered by year)
+  const filteredForRank = yearFilter === 'all' ? sessions : sessions.filter(s => s.date.startsWith(yearFilter))
+  const rankProfits = {}
+  filteredForRank.forEach(s => {
+    rankProfits[s.player_name] = (rankProfits[s.player_name] || 0) + (s.cash_out - s.buy_in)
+  })
+  const rankSorted = Object.entries(rankProfits).sort((a, b) => b[1] - a[1])
+  const rankMedals = {}
+  if (rankSorted[0]) rankMedals[rankSorted[0][0]] = '🥇'
+  if (rankSorted[1]) rankMedals[rankSorted[1][0]] = '🥈'
+  if (rankSorted[2]) rankMedals[rankSorted[2][0]] = '🥉'
+
   // Year filter
   const years = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
   const filteredDates = yearFilter === 'all' ? sortedDates : sortedDates.filter(d => d.startsWith(yearFilter))
@@ -289,6 +301,15 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
         const isOpen = openNights[date]
         const potTotal = night.reduce((s, e) => s + e.buy_in, 0)
         const photoUrl = photos[date]
+        // Duration — take from first entry that has it (all entries of same session have same value)
+        const durationSecs = night.find(s => s.session_duration)?.session_duration
+        const durationLabel = durationSecs ? (() => {
+          const h = Math.floor(durationSecs / 3600)
+          const m = Math.floor((durationSecs % 3600) / 60)
+          if (h > 0) return `${h}h ${m}m`
+          return `${m}m`
+        })() : null
+        const sessionName = night.find(s => s.session_name)?.session_name
 
         return (
           <div key={date} className="card" style={{ marginBottom: '12px', padding: '0' }}>
@@ -296,11 +317,12 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
               style={{ padding: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div className="font-display" style={{ fontSize: '0.85rem', color: 'var(--gold)', letterSpacing: '0.1em' }}>
-                  {formatDate(date)}
+                  {sessionName || formatDate(date)}
                   {photoUrl && <span style={{ marginLeft: '8px', fontSize: '0.8rem' }}>📷</span>}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Pot {formatEuro(potTotal)}
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', display:'flex', gap:'10px', alignItems:'center' }}>
+                  <span>Pot {formatEuro(potTotal)}</span>
+                  {sessionName && <span style={{ color:'rgba(255,255,255,0.3)' }}>{formatDate(date)}</span>}
                 </div>
                 {/* Player chips */}
                 <div style={{ display: 'flex', marginTop: '6px', gap: '0' }}>
@@ -320,12 +342,17 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
                   )}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button onClick={e => { e.stopPropagation(); setSettlementNight(date) }}
-                  className="btn-ghost" style={{ fontSize: '0.65rem', padding: '5px 10px' }}>
-                  💸 Ausgleich
-                </button>
-                <span style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>{isOpen ? '▲' : '▼'}</span>
+              <div style={{ display: 'flex', flexDirection:'column', alignItems: 'flex-end', gap: '6px' }}>
+                {durationLabel && (
+                  <span style={{ fontSize:'0.7rem', color:'var(--text-muted)', fontFamily:'Cinzel,serif', letterSpacing:'0.05em' }}>⏱ {durationLabel}</span>
+                )}
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <button onClick={e => { e.stopPropagation(); setSettlementNight(date) }}
+                    className="btn-ghost" style={{ fontSize: '0.65rem', padding: '5px 10px' }}>
+                    💸 Ausgleich
+                  </button>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>{isOpen ? '▲' : '▼'}</span>
+                </div>
               </div>
             </div>
 
@@ -386,6 +413,9 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
                           )}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                               <div style={{ fontWeight: 600, fontSize: "0.95rem" }}>{s.player_name}</div>
+                              {rankMedals[s.player_name] && (
+                                <span style={{ fontSize: '1rem' }}>{rankMedals[s.player_name]}</span>
+                              )}
                               {(yearBadges[s.player_name] || []).map((b, i) => (
                                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1, gap: '3px' }}>
                                   <span style={{ fontSize: '0.75rem' }}>{b.emoji}</span>
