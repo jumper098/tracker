@@ -22,10 +22,12 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
 
   // Modals
   const [rebuyModal, setRebuyModal] = useState(null) // player name
+  const [rebuyAmount, setRebuyAmount] = useState('')
   const [cashoutModal, setCashoutModal] = useState(null) // player name
   const [cashoutValue, setCashoutValue] = useState('')
-  const [lateJoinModal, setLateJoinModal] = useState(false)
-  const [lateJoinPlayer, setLateJoinPlayer] = useState('')
+  const [addPlayerModal, setAddPlayerModal] = useState(false)
+  const [addPlayerName, setAddPlayerName] = useState('')
+  const [removeConfirm, setRemoveConfirm] = useState(null) // player name
   const [endConfirm, setEndConfirm] = useState(false)
 
   // Load existing session on mount
@@ -119,16 +121,19 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
     showToast('♠ Session gestartet!')
   }
 
-  function addRebuy(playerName) {
+  function addRebuy(playerName, amount) {
+    const amt = parseFloat(amount)
+    if (isNaN(amt) || amt <= 0) { showToast('⚠ Ungültiger Betrag'); return }
     updateSession(prev => ({
       ...prev,
       players: prev.players.map(p => p.name === playerName
-        ? { ...p, rebuys: [...p.rebuys, prev.buyin] }
+        ? { ...p, rebuys: [...p.rebuys, amt] }
         : p
       )
     }))
     setRebuyModal(null)
-    showToast(`↺ Rebuy für ${playerName}`)
+    setRebuyAmount('')
+    showToast(`↺ Rebuy für ${playerName}: ${amt}€`)
   }
 
   function setCashout(playerName, value) {
@@ -150,17 +155,26 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
     }))
   }
 
-  function lateJoin() {
-    if (!lateJoinPlayer) return
+  function removePlayer(playerName) {
+    updateSession(prev => ({
+      ...prev,
+      players: prev.players.filter(p => p.name !== playerName)
+    }))
+    setRemoveConfirm(null)
+    showToast(`✓ ${playerName} entfernt`)
+  }
+
+  function addPlayer() {
+    if (!addPlayerName) return
     const s = sessionRef.current
     if (!s) return
-    if (s.players.find(p => p.name === lateJoinPlayer)) {
+    if (s.players.find(p => p.name === addPlayerName)) {
       showToast('⚠ Spieler bereits dabei'); return
     }
     updateSession(prev => ({
       ...prev,
       players: [...prev.players, {
-        name: lateJoinPlayer,
+        name: addPlayerName,
         buyin: prev.buyin,
         rebuys: [],
         cashout: null,
@@ -168,9 +182,9 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
         lateJoin: true,
       }]
     }))
-    setLateJoinModal(false)
-    setLateJoinPlayer('')
-    showToast(`✓ ${lateJoinPlayer} ist dazugekommen`)
+    setAddPlayerModal(false)
+    setAddPlayerName('')
+    showToast(`✓ ${addPlayerName} ist dazugekommen`)
   }
 
   async function endSession() {
@@ -264,22 +278,27 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
   return (
     <div>
       {/* Header */}
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px',
-        padding:'12px 14px', borderRadius:'12px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
-        <div>
-          <div className="font-display" style={{ fontSize:'0.8rem', color:'var(--gold)' }}>{session.name}</div>
-          <div style={{ fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'2px' }}>{session.date}</div>
-        </div>
-        <div style={{ textAlign:'center' }}>
-          <div style={{ fontFamily:'Cinzel,serif', fontSize:'1.4rem', color:'#4ade80', letterSpacing:'0.05em' }}>
-            ⏱ {formatElapsed(elapsed)}
+      <div style={{ marginBottom:'12px', padding:'12px 14px', borderRadius:'12px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
+          <div>
+            <div className="font-display" style={{ fontSize:'0.8rem', color:'var(--gold)' }}>{session.name}</div>
+            <div style={{ fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'2px' }}>{session.date}</div>
           </div>
-          <div style={{ fontSize:'0.6rem', color:'var(--text-muted)' }}>LAUFZEIT</div>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontFamily:'Cinzel,serif', fontSize:'1.4rem', color:'#4ade80', letterSpacing:'0.05em' }}>
+              ⏱ {formatElapsed(elapsed)}
+            </div>
+            <div style={{ fontSize:'0.6rem', color:'var(--text-muted)' }}>LAUFZEIT</div>
+          </div>
+          <div style={{ textAlign:'right' }}>
+            <div className="font-display" style={{ fontSize:'1rem', color:'var(--gold)' }}>{totalPot}€</div>
+            <div style={{ fontSize:'0.6rem', color:'var(--text-muted)' }}>GESAMTPOT</div>
+          </div>
         </div>
-        <div style={{ textAlign:'right' }}>
-          <div className="font-display" style={{ fontSize:'1rem', color:'var(--gold)' }}>{totalPot}€</div>
-          <div style={{ fontSize:'0.6rem', color:'var(--text-muted)' }}>GESAMTPOT</div>
-        </div>
+        <button onClick={() => setAddPlayerModal(true)}
+          style={{ width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid rgba(96,165,250,0.35)', background:'rgba(96,165,250,0.08)', color:'#60a5fa', fontFamily:'Cinzel,serif', fontSize:'0.7rem', letterSpacing:'0.08em', cursor:'pointer' }}>
+          + SPIELER HINZUFÜGEN
+        </button>
       </div>
 
       {/* Player cards */}
@@ -327,6 +346,12 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
                   style={{ padding:'5px 12px', borderRadius:'7px', border:'1px solid rgba(244,114,182,0.35)', background:'rgba(244,114,182,0.08)', color:'#f472b6', fontFamily:'Cinzel,serif', fontSize:'0.65rem', cursor:'pointer' }}>
                   + Rebuy
                 </button>
+                {!hasCashout && (
+                  <button onClick={() => setRemoveConfirm(p.name)}
+                    style={{ padding:'5px 8px', borderRadius:'7px', border:'1px solid rgba(248,113,113,0.3)', background:'rgba(248,113,113,0.06)', color:'#f87171', fontFamily:'Cinzel,serif', fontSize:'0.65rem', cursor:'pointer' }}>
+                    ✕
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -348,12 +373,9 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
       )}
 
       {/* Actions */}
-      <div style={{ display:'flex', gap:'10px', marginBottom:'12px' }}>
-        <button onClick={() => setLateJoinModal(true)} className="btn-ghost" style={{ flex:1, fontSize:'0.75rem', color:'#60a5fa', borderColor:'rgba(96,165,250,0.35)' }}>
-          + Late Join
-        </button>
+      <div style={{ marginBottom:'12px' }}>
         <button onClick={() => setEndConfirm(true)}
-          style={{ flex:2, padding:'13px', borderRadius:'10px', border:'1px solid rgba(201,168,76,0.4)', background:'rgba(201,168,76,0.12)', color:'var(--gold)', fontFamily:'Cinzel,serif', fontSize:'0.8rem', cursor:'pointer', letterSpacing:'0.08em' }}>
+          style={{ width:'100%', padding:'14px', borderRadius:'10px', border:'1px solid rgba(201,168,76,0.4)', background:'rgba(201,168,76,0.12)', color:'var(--gold)', fontFamily:'Cinzel,serif', fontSize:'0.8rem', cursor:'pointer', letterSpacing:'0.08em' }}>
           ✓ SESSION BEENDEN
         </button>
       </div>
@@ -361,15 +383,20 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
       {/* Rebuy Modal */}
       {rebuyModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
-          onClick={() => setRebuyModal(null)}>
+          onClick={() => { setRebuyModal(null); setRebuyAmount('') }}>
           <div className="card" style={{ maxWidth:'320px', width:'100%', padding:'24px', textAlign:'center' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize:'2rem', marginBottom:'8px' }}>↺</div>
-            <div className="font-display" style={{ fontSize:'0.85rem', color:'#f472b6', marginBottom:'4px' }}>REBUY BESTÄTIGEN</div>
-            <div style={{ fontSize:'1rem', marginBottom:'4px' }}>{rebuyModal}</div>
-            <div style={{ fontSize:'0.8rem', color:'var(--text-muted)', marginBottom:'24px' }}>+{session.buyin}€</div>
+            <div className="font-display" style={{ fontSize:'0.85rem', color:'#f472b6', marginBottom:'4px' }}>REBUY</div>
+            <div style={{ fontSize:'1rem', marginBottom:'16px' }}>{rebuyModal}</div>
+            <label className="section-label">Betrag (€)</label>
+            <input className="input-field" type="number" value={rebuyAmount}
+              onChange={e => setRebuyAmount(e.target.value)}
+              onFocus={e => e.target.select()}
+              placeholder={String(session?.buyin || 20)} min="0" step="0.5" autoFocus
+              style={{ fontSize:'1.4rem', textAlign:'center', marginBottom:'16px' }} />
             <div style={{ display:'flex', gap:'10px' }}>
-              <button className="btn-ghost" style={{ flex:1 }} onClick={() => setRebuyModal(null)}>Abbrechen</button>
-              <button onClick={() => addRebuy(rebuyModal)}
+              <button className="btn-ghost" style={{ flex:1 }} onClick={() => { setRebuyModal(null); setRebuyAmount('') }}>Abbrechen</button>
+              <button onClick={() => addRebuy(rebuyModal, rebuyAmount || session?.buyin)}
                 style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(244,114,182,0.4)', background:'rgba(244,114,182,0.12)', color:'#f472b6', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
                 ✓ Bestätigen
               </button>
@@ -402,14 +429,14 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
         </div>
       )}
 
-      {/* Late Join Modal */}
-      {lateJoinModal && (
+      {/* Add Player Modal */}
+      {addPlayerModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
-          onClick={() => setLateJoinModal(false)}>
+          onClick={() => setAddPlayerModal(false)}>
           <div className="card" style={{ maxWidth:'320px', width:'100%', padding:'24px' }} onClick={e => e.stopPropagation()}>
-            <div className="font-display" style={{ fontSize:'0.85rem', color:'#60a5fa', marginBottom:'16px' }}>🚪 LATE JOIN</div>
+            <div className="font-display" style={{ fontSize:'0.85rem', color:'#60a5fa', marginBottom:'16px' }}>+ SPIELER HINZUFÜGEN</div>
             <label className="section-label">Spieler</label>
-            <select className="input-field" value={lateJoinPlayer} onChange={e => setLateJoinPlayer(e.target.value)} style={{ marginBottom:'16px' }}>
+            <select className="input-field" value={addPlayerName} onChange={e => setAddPlayerName(e.target.value)} style={{ marginBottom:'10px' }}>
               <option value="">— Spieler auswählen —</option>
               {players.filter(p => !session.players.find(sp => sp.name === p)).map(p =>
                 <option key={p} value={p}>{p}</option>
@@ -419,10 +446,29 @@ function LiveSession({ players, avatars = {}, onEnd, onBack }) {
               Buy-In: {session.buyin}€
             </div>
             <div style={{ display:'flex', gap:'10px' }}>
-              <button className="btn-ghost" style={{ flex:1 }} onClick={() => setLateJoinModal(false)}>Abbrechen</button>
-              <button onClick={lateJoin}
+              <button className="btn-ghost" style={{ flex:1 }} onClick={() => setAddPlayerModal(false)}>Abbrechen</button>
+              <button onClick={addPlayer}
                 style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(96,165,250,0.4)', background:'rgba(96,165,250,0.12)', color:'#60a5fa', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
-                ✓ Dazukommen
+                ✓ Hinzufügen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Player Confirm */}
+      {removeConfirm && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
+          onClick={() => setRemoveConfirm(null)}>
+          <div className="card" style={{ maxWidth:'320px', width:'100%', padding:'24px', textAlign:'center' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:'2rem', marginBottom:'8px' }}>✕</div>
+            <div className="font-display" style={{ fontSize:'0.85rem', color:'#f87171', marginBottom:'8px' }}>SPIELER ENTFERNEN?</div>
+            <div style={{ fontSize:'1rem', marginBottom:'20px' }}>{removeConfirm}</div>
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button className="btn-ghost" style={{ flex:1 }} onClick={() => setRemoveConfirm(null)}>Abbrechen</button>
+              <button onClick={() => removePlayer(removeConfirm)}
+                style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(248,113,113,0.4)', background:'rgba(248,113,113,0.1)', color:'#f87171', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
+                ✓ Entfernen
               </button>
             </div>
           </div>
