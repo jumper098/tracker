@@ -97,21 +97,19 @@ function PlayerOfMonth({ sessions, avatars }) {
             pointerEvents: 'none',
           }} />
 
-          {/* Crown */}
-          <div style={{
-            position: 'absolute', top: '10px', left: '50px',
-            fontSize: '1.1rem',
-            filter: 'drop-shadow(0 0 6px rgba(201,168,76,0.8))',
-            animation: 'crownFloat 3s ease-in-out infinite',
-          }}>👑</div>
-
-          {/* Header label */}
-          <div style={{
-            fontFamily: 'Cinzel, serif', fontSize: '0.55rem',
-            color: 'rgba(201,168,76,0.6)', letterSpacing: '0.22em',
-            marginBottom: '16px',
-          }}>
-            SPIELER DES MONATS · {getMonthLabel(currentYM).toUpperCase()}
+          {/* Header label — links Krone, rechts daneben der Text */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+            <div style={{
+              fontSize: '1.1rem', flexShrink: 0,
+              filter: 'drop-shadow(0 0 6px rgba(201,168,76,0.8))',
+              animation: 'crownFloat 3s ease-in-out infinite',
+            }}>👑</div>
+            <div style={{
+              fontFamily: 'Cinzel, serif', fontSize: '0.55rem',
+              color: 'rgba(201,168,76,0.6)', letterSpacing: '0.18em',
+            }}>
+              SPIELER DES MONATS · {getMonthLabel(currentYM).toUpperCase()}
+            </div>
           </div>
 
           {/* Main content */}
@@ -187,6 +185,7 @@ function PlayerOfMonth({ sessions, avatars }) {
             {pastMonths.map(ym => {
               const winner = calcPlayerOfMonth(sessions, ym)
               if (!winner) return null
+              const winRate = Math.round(winner.wins / winner.sessions * 100)
               return (
                 <div key={ym} style={{
                   display: 'flex', alignItems: 'center', gap: '10px',
@@ -204,14 +203,16 @@ function PlayerOfMonth({ sessions, avatars }) {
                       {getMonthLabel(ym)}
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{
-                      fontFamily: 'Cinzel, serif', fontSize: '0.78rem',
-                      color: winner.profit >= 0 ? '#4ade80' : '#f87171',
-                    }}>
+                  {/* Kompakte Stats — drei Werte inline */}
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexShrink: 0 }}>
+                    <span style={{ fontFamily: 'Cinzel, serif', fontSize: '0.72rem', color: winner.profit >= 0 ? '#4ade80' : '#f87171' }}>
                       {winner.profit >= 0 ? '+' : ''}{winner.profit.toFixed(0)}€
-                    </div>
-                    <div style={{ fontSize: '0.52rem', color: 'rgba(201,168,76,0.5)', marginTop: '1px' }}>👑</div>
+                    </span>
+                    <span style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.15)' }}>·</span>
+                    <span style={{ fontSize: '0.65rem', color: '#60a5fa' }}>{winner.sessions}×</span>
+                    <span style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.15)' }}>·</span>
+                    <span style={{ fontSize: '0.65rem', color: '#a78bfa' }}>{winRate}%</span>
+                    <span style={{ fontSize: '0.6rem', color: 'rgba(201,168,76,0.4)', marginLeft: '2px' }}>👑</span>
                   </div>
                 </div>
               )
