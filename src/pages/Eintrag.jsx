@@ -104,11 +104,19 @@ function PlayerOfMonth({ sessions, avatars }) {
               filter: 'drop-shadow(0 0 6px rgba(201,168,76,0.8))',
               animation: 'crownFloat 3s ease-in-out infinite',
             }}>👑</div>
-            <div style={{
-              fontFamily: 'Cinzel, serif', fontSize: '0.55rem',
-              color: 'rgba(201,168,76,0.6)', letterSpacing: '0.18em',
-            }}>
-              SPIELER DES MONATS · {getMonthLabel(currentYM).toUpperCase()}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <div style={{
+                fontFamily: 'Cinzel, serif', fontSize: '0.8rem', fontWeight: '700',
+                color: 'rgba(201,168,76,0.9)', letterSpacing: '0.15em',
+              }}>
+                SPIELER DES MONATS
+              </div>
+              <div style={{
+                fontFamily: 'Cinzel, serif', fontSize: '0.7rem', fontWeight: '600',
+                color: 'rgba(201,168,76,0.6)', letterSpacing: '0.12em',
+              }}>
+                {getMonthLabel(currentYM).toUpperCase()}
+              </div>
             </div>
           </div>
 
