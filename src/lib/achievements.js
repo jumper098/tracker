@@ -252,7 +252,7 @@ export const ACHIEVEMENTS = [
         if (ms.length === 0) return
         const st = {}
         ms.forEach(s => {
-          if (!st[s.player_name]) st[s.player_name] = { sessions: 0, profit: 0, wins: 0, bestSession: -Infinity, totalRebuys: 0 }
+          if (!st[s.player_name]) st[s.player_name] = { name: s.player_name, sessions: 0, profit: 0, wins: 0, bestSession: -Infinity, totalRebuys: 0 }
           const p = st[s.player_name], profit = s.cash_out - s.buy_in
           p.sessions++; p.profit += profit; if (profit > 0) p.wins++
           if (profit > p.bestSession) p.bestSession = profit
@@ -270,7 +270,7 @@ export const ACHIEVEMENTS = [
             (10 - Math.min(p.totalRebuys / p.sessions, 1) * 10)
         }))
         const winner = scored.sort((a, b) => b.score - a.score)[0]
-        if (winner) winners.add(winner.name)
+        if (winner?.name) winners.add(winner.name)
       })
       return [...winners]
     },
@@ -288,7 +288,7 @@ export const ACHIEVEMENTS = [
         if (ms.length === 0) return
         const st = {}
         ms.forEach(s => {
-          if (!st[s.player_name]) st[s.player_name] = { sessions: 0, profit: 0, wins: 0, bestSession: -Infinity, totalRebuys: 0 }
+          if (!st[s.player_name]) st[s.player_name] = { name: s.player_name, sessions: 0, profit: 0, wins: 0, bestSession: -Infinity, totalRebuys: 0 }
           const p = st[s.player_name], profit = s.cash_out - s.buy_in
           p.sessions++; p.profit += profit; if (profit > 0) p.wins++
           if (profit > p.bestSession) p.bestSession = profit
@@ -306,7 +306,7 @@ export const ACHIEVEMENTS = [
             (10 - Math.min(p.totalRebuys / p.sessions, 1) * 10)
         }))
         const winner = scored.sort((a, b) => b.score - a.score)[0]
-        if (winner) counts[winner.name] = (counts[winner.name] || 0) + 1
+        if (winner?.name) counts[winner.name] = (counts[winner.name] || 0) + 1
       })
       return Object.entries(counts).filter(([, c]) => c >= 3).map(([n]) => n)
     },
