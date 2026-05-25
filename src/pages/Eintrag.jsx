@@ -5,33 +5,259 @@ import { showToast } from '../components/Toast'
 import Avatar from '../components/Avatar'
 import { calcYearBadges } from '../lib/badges'
 
-// ─── Live Session ────────────────────────────────────────────────────────────
+// ─── Spieler des Monats Berechnung ───────────────────────────────────────────
+function calcPlayerOfMonth(sessions, yearMonth) {
+  const [year, month] = yearMonth.split('-').map(Number)
+  const monthSessions = sessions.filter(s => {
+    const d = new Date(s.date)
+    return d.getFullYear() === year && d.getMonth() + 1 === month
+  })
+  if (monthSessions.length === 0) return null
+
+  const stats = {}
+  monthSessions.forEach(s => {
+    if (!stats[s.player_name]) stats[s.player_name] = {
+      name: s.player_name, sessions: 0, profit: 0,
+      wins: 0, bestSession: -Infinity, totalRebuys: 0
+    }
+    const p = stats[s.player_name]
+    const profit = s.cash_out - s.buy_in
+    p.sessions++
+    p.profit += profit
+    if (profit > 0) p.wins++
+    if (profit > p.bestSession) p.bestSession = profit
+    p.totalRebuys += (s.rebuy_count || 0)
+  })
+
+  const candidates = Object.values(stats).filter(p => p.sessions >= 2)
+  if (candidates.length === 0) {
+    // Falls niemand 2+ Sessions hat, nimm den Besten mit 1 Session
+    const all = Object.values(stats)
+    if (all.length === 0) return null
+    return all.sort((a, b) => b.profit - a.profit)[0]
+  }
+
+  // Normalize & score
+  const profits = candidates.map(p => p.profit)
+  const maxProfit = Math.max(...profits)
+  const minProfit = Math.min(...profits)
+  const profitRange = maxProfit - minProfit || 1
+
+  const scored = candidates.map(p => {
+    const profitScore    = ((p.profit - minProfit) / profitRange) * 40
+    const winRateScore   = (p.wins / p.sessions) * 25
+    const sessionsScore  = Math.min(p.sessions / 6, 1) * 15
+    const bestScore      = Math.max(0, Math.min(p.bestSession / 100, 1)) * 10
+    const rebuyPenalty   = Math.min(p.totalRebuys / p.sessions, 1) * 10
+    return { ...p, score: profitScore + winRateScore + sessionsScore + bestScore + (10 - rebuyPenalty) }
+  })
+
+  return scored.sort((a, b) => b.score - a.score)[0]
+}
+
+function getMonthLabel(yearMonth) {
+  const [year, month] = yearMonth.split('-').map(Number)
+  const months = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
+  return `${months[month - 1]} ${year}`
+}
+
+function getPastMonths(sessions, currentYM) {
+  const monthSet = new Set(sessions.map(s => s.date.slice(0, 7)))
+  monthSet.delete(currentYM)
+  return [...monthSet].sort((a, b) => b.localeCompare(a))
+}
+
+// ─── Spieler des Monats Komponente ───────────────────────────────────────────
+function PlayerOfMonth({ sessions, avatars }) {
+  const now = new Date()
+  const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const current = calcPlayerOfMonth(sessions, currentYM)
+  const pastMonths = getPastMonths(sessions, currentYM)
+
+  if (!current && pastMonths.length === 0) return null
+
+  return (
+    <div style={{ marginBottom: '24px' }}>
+
+      {/* ── Aktueller Spieler des Monats ── */}
+      {current ? (
+        <div style={{
+          position: 'relative', borderRadius: '20px', overflow: 'hidden',
+          background: 'linear-gradient(135deg, rgba(201,168,76,0.12) 0%, rgba(10,10,12,0.95) 60%)',
+          border: '1px solid rgba(201,168,76,0.35)',
+          padding: '24px 20px 20px',
+          marginBottom: '12px',
+        }}>
+          {/* Glow hinter Avatar */}
+          <div style={{
+            position: 'absolute', top: '20px', left: '20px',
+            width: '80px', height: '80px', borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(201,168,76,0.25) 0%, transparent 70%)',
+            filter: 'blur(12px)',
+            pointerEvents: 'none',
+          }} />
+
+          {/* Crown */}
+          <div style={{
+            position: 'absolute', top: '10px', left: '50px',
+            fontSize: '1.1rem',
+            filter: 'drop-shadow(0 0 6px rgba(201,168,76,0.8))',
+            animation: 'crownFloat 3s ease-in-out infinite',
+          }}>👑</div>
+
+          {/* Header label */}
+          <div style={{
+            fontFamily: 'Cinzel, serif', fontSize: '0.55rem',
+            color: 'rgba(201,168,76,0.6)', letterSpacing: '0.22em',
+            marginBottom: '16px',
+          }}>
+            SPIELER DES MONATS · {getMonthLabel(currentYM).toUpperCase()}
+          </div>
+
+          {/* Main content */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {/* Avatar mit Ring */}
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <div style={{
+                position: 'absolute', inset: '-4px', borderRadius: '50%',
+                background: 'conic-gradient(from 0deg, #C9A84C, #f5d885, #C9A84C, #8a6a1a, #C9A84C)',
+                animation: 'ringRotate 4s linear infinite',
+              }} />
+              <div style={{
+                position: 'relative', zIndex: 1,
+                background: '#0a0a0c', borderRadius: '50%', padding: '3px',
+              }}>
+                <Avatar name={current.name} avatars={avatars} size={68} />
+              </div>
+            </div>
+
+            {/* Name & Stats */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontFamily: 'Cinzel, serif', fontSize: '1.25rem',
+                color: 'var(--gold)', letterSpacing: '0.05em',
+                marginBottom: '8px',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{current.name}</div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                {[
+                  { label: 'PROFIT', value: (current.profit >= 0 ? '+' : '') + current.profit.toFixed(0) + '€', color: current.profit >= 0 ? '#4ade80' : '#f87171' },
+                  { label: 'SESSIONS', value: current.sessions, color: '#60a5fa' },
+                  { label: 'WINRATE', value: Math.round(current.wins / current.sessions * 100) + '%', color: '#a78bfa' },
+                ].map(stat => (
+                  <div key={stat.label} style={{
+                    textAlign: 'center', padding: '7px 4px', borderRadius: '10px',
+                    background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.06)',
+                  }}>
+                    <div style={{ fontFamily: 'Cinzel, serif', fontSize: '0.95rem', color: stat.color, lineHeight: 1 }}>{stat.value}</div>
+                    <div style={{ fontSize: '0.45rem', color: 'var(--text-muted)', letterSpacing: '0.15em', marginTop: '3px' }}>{stat.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{
+          padding: '18px', borderRadius: '16px', marginBottom: '12px',
+          border: '1px dashed rgba(201,168,76,0.2)',
+          textAlign: 'center',
+        }}>
+          <div style={{ fontSize: '1.4rem', marginBottom: '6px', opacity: 0.4 }}>👑</div>
+          <div style={{ fontFamily: 'Cinzel, serif', fontSize: '0.65rem', color: 'var(--text-muted)', letterSpacing: '0.12em' }}>
+            NOCH KEIN SIEGER — {getMonthLabel(currentYM).toUpperCase()}
+          </div>
+          <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.2)', marginTop: '4px' }}>
+            Mind. 2 Sessions nötig
+          </div>
+        </div>
+      )}
+
+      {/* ── Vergangene Monate ── */}
+      {pastMonths.length > 0 && (
+        <div>
+          <div style={{
+            fontFamily: 'Cinzel, serif', fontSize: '0.5rem',
+            color: 'rgba(255,255,255,0.2)', letterSpacing: '0.18em',
+            marginBottom: '8px', paddingLeft: '2px',
+          }}>VERGANGENE SIEGER</div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {pastMonths.map(ym => {
+              const winner = calcPlayerOfMonth(sessions, ym)
+              if (!winner) return null
+              return (
+                <div key={ym} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '9px 12px', borderRadius: '12px',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}>
+                  <Avatar name={winner.name} avatars={avatars} size={28} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: '0.82rem', color: 'var(--text-primary)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>{winner.name}</div>
+                    <div style={{ fontSize: '0.58rem', color: 'var(--text-muted)', marginTop: '1px' }}>
+                      {getMonthLabel(ym)}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{
+                      fontFamily: 'Cinzel, serif', fontSize: '0.78rem',
+                      color: winner.profit >= 0 ? '#4ade80' : '#f87171',
+                    }}>
+                      {winner.profit >= 0 ? '+' : ''}{winner.profit.toFixed(0)}€
+                    </div>
+                    <div style={{ fontSize: '0.52rem', color: 'rgba(201,168,76,0.5)', marginTop: '1px' }}>👑</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes crownFloat {
+          0%, 100% { transform: translateY(0px) rotate(-5deg); }
+          50% { transform: translateY(-4px) rotate(5deg); }
+        }
+        @keyframes ringRotate {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// ─── Live Session ─────────────────────────────────────────────────────────────
 function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
   const [session, setSession] = useState(null)
-  const [view, setView] = useState('setup') // setup | live
+  const [view, setView] = useState('setup')
   const myId = useRef(Math.random().toString(36).slice(2))
   const sessionRef = useRef(null)
   const timerRef = useRef(null)
   const [elapsed, setElapsed] = useState(0)
 
-  // Setup state
   const today = new Date().toISOString().split('T')[0]
   const [sName, setSName] = useState('Poker Abend')
   const [sDate, setSDate] = useState(today)
   const [sBuyin, setSBuyin] = useState('20')
   const [sPlayers, setSPlayers] = useState([])
 
-  // Modals
-  const [rebuyModal, setRebuyModal] = useState(null) // player name
+  const [rebuyModal, setRebuyModal] = useState(null)
   const [rebuyAmount, setRebuyAmount] = useState('')
-  const [cashoutModal, setCashoutModal] = useState(null) // player name
+  const [cashoutModal, setCashoutModal] = useState(null)
   const [cashoutValue, setCashoutValue] = useState('')
   const [addPlayerModal, setAddPlayerModal] = useState(false)
   const [addPlayerName, setAddPlayerName] = useState('')
-  const [removeConfirm, setRemoveConfirm] = useState(null) // player name
+  const [removeConfirm, setRemoveConfirm] = useState(null)
   const [endConfirm, setEndConfirm] = useState(false)
 
-  // Load existing session on mount
   useEffect(() => {
     db.from('live_session').select('data').eq('id', 'current').single()
       .then(({ data }) => {
@@ -79,7 +305,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
     setTimeout(() => writeDb(updated), 0)
   }
 
-  // Realtime listener
   useEffect(() => {
     const channel = db.channel('live_session_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'live_session' }, payload => {
@@ -102,17 +327,8 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
     const buyin = parseFloat(sBuyin)
     const startedAt = Date.now()
     const newSession = {
-      name: sName,
-      date: sDate,
-      buyin,
-      startedAt,
-      players: sPlayers.map(name => ({
-        name,
-        buyin,
-        rebuys: [],
-        cashout: null,
-        joinedAt: startedAt,
-      }))
+      name: sName, date: sDate, buyin, startedAt,
+      players: sPlayers.map(name => ({ name, buyin, rebuys: [], cashout: null, joinedAt: startedAt }))
     }
     sessionRef.current = newSession
     setSession(newSession)
@@ -127,13 +343,9 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
     if (isNaN(amt) || amt <= 0) { showToast('⚠ Ungültiger Betrag'); return }
     updateSession(prev => ({
       ...prev,
-      players: prev.players.map(p => p.name === playerName
-        ? { ...p, rebuys: [...p.rebuys, amt] }
-        : p
-      )
+      players: prev.players.map(p => p.name === playerName ? { ...p, rebuys: [...p.rebuys, amt] } : p)
     }))
-    setRebuyModal(null)
-    setRebuyAmount('')
+    setRebuyModal(null); setRebuyAmount('')
     showToast(`↺ Rebuy für ${playerName}: ${amt}€`)
   }
 
@@ -144,8 +356,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
       ...prev,
       players: prev.players.map(p => p.name === playerName ? { ...p, cashout: amount } : p)
     }))
-    setCashoutModal(null)
-    setCashoutValue('')
+    setCashoutModal(null); setCashoutValue('')
     showToast(`✓ Cash-Out für ${playerName}: ${amount}€`)
   }
 
@@ -157,10 +368,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
   }
 
   function removePlayer(playerName) {
-    updateSession(prev => ({
-      ...prev,
-      players: prev.players.filter(p => p.name !== playerName)
-    }))
+    updateSession(prev => ({ ...prev, players: prev.players.filter(p => p.name !== playerName) }))
     setRemoveConfirm(null)
     showToast(`✓ ${playerName} entfernt`)
   }
@@ -169,46 +377,27 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
     if (!addPlayerName) return
     const s = sessionRef.current
     if (!s) return
-    if (s.players.find(p => p.name === addPlayerName)) {
-      showToast('⚠ Spieler bereits dabei'); return
-    }
+    if (s.players.find(p => p.name === addPlayerName)) { showToast('⚠ Spieler bereits dabei'); return }
     updateSession(prev => ({
       ...prev,
-      players: [...prev.players, {
-        name: addPlayerName,
-        buyin: prev.buyin,
-        rebuys: [],
-        cashout: null,
-        joinedAt: Date.now(),
-        lateJoin: true,
-      }]
+      players: [...prev.players, { name: addPlayerName, buyin: prev.buyin, rebuys: [], cashout: null, joinedAt: Date.now(), lateJoin: true }]
     }))
-    setAddPlayerModal(false)
-    setAddPlayerName('')
+    setAddPlayerModal(false); setAddPlayerName('')
     showToast(`✓ ${addPlayerName} ist dazugekommen`)
   }
 
   async function endSession() {
     const s = sessionRef.current
     if (!s) return
-    // Check all cashed out
     const missing = s.players.filter(p => p.cashout === null).map(p => p.name)
-    if (missing.length > 0) {
-      showToast(`⚠ Cash-Out fehlt: ${missing.join(', ')}`); return
-    }
+    if (missing.length > 0) { showToast(`⚠ Cash-Out fehlt: ${missing.join(', ')}`); return }
     const durationSeconds = Math.floor((Date.now() - s.startedAt) / 1000)
-    // Save all players as individual sessions
     const inserts = s.players.map(p => {
       const totalBuyin = p.buyin + p.rebuys.reduce((a, r) => a + r, 0)
       return {
-        date: s.date,
-        player_name: p.name,
-        buy_in: totalBuyin,
-        cash_out: p.cashout,
-        rebuys: p.rebuys.reduce((a, r) => a + r, 0),
-        rebuy_count: p.rebuys.length,
-        session_name: s.name,
-        session_duration: durationSeconds,
+        date: s.date, player_name: p.name, buy_in: totalBuyin,
+        cash_out: p.cashout, rebuys: p.rebuys.reduce((a, r) => a + r, 0),
+        rebuy_count: p.rebuys.length, session_name: s.name, session_duration: durationSeconds,
       }
     })
     const { error } = await db.from('poker_sessions').insert(inserts)
@@ -219,14 +408,12 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
     onEnd()
   }
 
-  // ── SETUP VIEW ──────────────────────────────────────────────────────────────
   if (view === 'setup') return (
     <div>
       <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'20px' }}>
         <button onClick={onBack} className="btn-ghost" style={{ padding:'8px 14px', fontSize:'0.75rem' }}>← Zurück</button>
         <div className="font-display" style={{ fontSize:'0.9rem', color:'var(--gold)' }}>LIVE SESSION</div>
       </div>
-
       <div className="card" style={{ marginBottom:'16px' }}>
         <div style={{ marginBottom:'14px' }}>
           <label className="section-label">Session Name</label>
@@ -243,7 +430,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
             placeholder="20" min="0" step="0.5" />
         </div>
       </div>
-
       <div className="card" style={{ marginBottom:'16px' }}>
         <div className="font-display" style={{ fontSize:'0.72rem', color:'var(--gold)', marginBottom:'12px' }}>
           SPIELER AUSWÄHLEN ({sPlayers.length})
@@ -264,14 +450,12 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
           })}
         </div>
       </div>
-
       <button className="btn-gold" style={{ width:'100%', fontSize:'1rem', padding:'16px' }} onClick={startSession}>
         ▶ SESSION STARTEN
       </button>
     </div>
   )
 
-  // ── LIVE VIEW ───────────────────────────────────────────────────────────────
   if (!session) return null
   const totalPot = session.players.reduce((s, p) => s + p.buyin + p.rebuys.reduce((a,r) => a+r, 0), 0)
   const allCashedOut = session.players.every(p => p.cashout !== null)
@@ -281,7 +465,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
 
   return (
     <div>
-      {/* Header */}
       <div style={{ marginBottom:'12px', padding:'12px 14px', borderRadius:'12px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
           <div>
@@ -305,7 +488,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
         </button>
       </div>
 
-      {/* Player cards */}
       {session.players.map(p => {
         const totalBuyin = p.buyin + p.rebuys.reduce((a,r) => a+r, 0)
         const profit = p.cashout !== null ? p.cashout - totalBuyin : null
@@ -332,8 +514,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                   {p.rebuys.length > 0 && <span style={{ color:'#f472b6', marginLeft:'6px' }}>{p.rebuys.length}× Rebuy</span>}
                 </div>
               </div>
-
-              {/* Right side */}
               <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'6px' }}>
                 {hasCashout ? (
                   <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
@@ -368,7 +548,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
         )
       })}
 
-      {/* Pot balance */}
       {allCashedOut && (
         <div style={{ marginBottom:'12px', padding:'12px 16px', borderRadius:'10px',
           background: Math.abs(diff) < 0.01 ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)',
@@ -382,7 +561,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
         </div>
       )}
 
-      {/* Actions */}
       <div style={{ marginBottom:'12px' }}>
         <button onClick={() => setEndConfirm(true)}
           style={{ width:'100%', padding:'14px', borderRadius:'10px', border:'1px solid rgba(201,168,76,0.4)', background:'rgba(201,168,76,0.12)', color:'var(--gold)', fontFamily:'Cinzel,serif', fontSize:'0.8rem', cursor:'pointer', letterSpacing:'0.08em' }}>
@@ -390,7 +568,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
         </button>
       </div>
 
-      {/* Rebuy Modal */}
       {rebuyModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
           onClick={() => { setRebuyModal(null); setRebuyAmount('') }}>
@@ -400,8 +577,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
             <div style={{ fontSize:'1rem', marginBottom:'16px' }}>{rebuyModal}</div>
             <label className="section-label">Betrag (€)</label>
             <input className="input-field" type="number" value={rebuyAmount}
-              onChange={e => setRebuyAmount(e.target.value)}
-              onFocus={e => e.target.select()}
+              onChange={e => setRebuyAmount(e.target.value)} onFocus={e => e.target.select()}
               placeholder={String(session?.buyin || 20)} min="0" step="0.5" autoFocus
               style={{ fontSize:'1.4rem', textAlign:'center', marginBottom:'16px' }} />
             <div style={{ display:'flex', gap:'10px' }}>
@@ -415,7 +591,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
         </div>
       )}
 
-      {/* Cash-Out Modal */}
       {cashoutModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
           onClick={() => setCashoutModal(null)}>
@@ -424,8 +599,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
             <div style={{ fontSize:'1rem', marginBottom:'16px' }}>{cashoutModal}</div>
             <label className="section-label">Betrag (€)</label>
             <input className="input-field" type="number" value={cashoutValue}
-              onChange={e => setCashoutValue(e.target.value)}
-              onFocus={e => e.target.select()}
+              onChange={e => setCashoutValue(e.target.value)} onFocus={e => e.target.select()}
               placeholder="0" min="0" step="0.5" autoFocus
               style={{ fontSize:'1.4rem', textAlign:'center', marginBottom:'16px' }} />
             <div style={{ display:'flex', gap:'10px' }}>
@@ -439,7 +613,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
         </div>
       )}
 
-      {/* Add Player Modal */}
       {addPlayerModal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
           onClick={() => setAddPlayerModal(false)}>
@@ -452,9 +625,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                 <option key={p} value={p}>{p}</option>
               )}
             </select>
-            <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', marginBottom:'16px' }}>
-              Buy-In: {session.buyin}€
-            </div>
+            <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', marginBottom:'16px' }}>Buy-In: {session.buyin}€</div>
             <div style={{ display:'flex', gap:'10px' }}>
               <button className="btn-ghost" style={{ flex:1 }} onClick={() => setAddPlayerModal(false)}>Abbrechen</button>
               <button onClick={addPlayer}
@@ -466,7 +637,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
         </div>
       )}
 
-      {/* Remove Player Confirm */}
       {removeConfirm && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
           onClick={() => setRemoveConfirm(null)}>
@@ -485,7 +655,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
         </div>
       )}
 
-      {/* End Confirm Modal */}
       {endConfirm && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
           onClick={() => setEndConfirm(false)}>
@@ -514,7 +683,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
   )
 }
 
-// ─── Manual Entry ────────────────────────────────────────────────────────────
+// ─── Manual Entry ─────────────────────────────────────────────────────────────
 function ManualEntry({ players, onSessionAdded }) {
   const today = new Date().toISOString().split('T')[0]
   const [date, setDate] = useState(today)
@@ -616,7 +785,6 @@ function ManualEntry({ players, onSessionAdded }) {
           {loading ? '…' : '♠ Eintrag speichern'}
         </button>
       </div>
-
       {showRebuyDialog && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
           onClick={() => setShowRebuyDialog(false)}>
@@ -645,10 +813,9 @@ function ManualEntry({ players, onSessionAdded }) {
 
 // ─── Main Eintrag ─────────────────────────────────────────────────────────────
 export default function Eintrag({ players, avatars = {}, sessions = [], onSessionAdded }) {
-  const [mode, setMode] = useState('home') // home | live | manual
+  const [mode, setMode] = useState('home')
   const [hasLive, setHasLive] = useState(false)
 
-  // Check if live session exists
   useEffect(() => {
     db.from('live_session').select('id').eq('id', 'current').single()
       .then(({ data }) => { if (data) setHasLive(true) })
@@ -658,9 +825,7 @@ export default function Eintrag({ players, avatars = {}, sessions = [], onSessio
   if (mode === 'live') return (
     <div style={{ padding:'20px 16px 100px' }}>
       <LiveSession
-        players={players}
-        avatars={avatars}
-        sessions={sessions}
+        players={players} avatars={avatars} sessions={sessions}
         onEnd={() => { setHasLive(false); setMode('home'); onSessionAdded() }}
         onBack={() => setMode('home')}
       />
@@ -677,14 +842,13 @@ export default function Eintrag({ players, avatars = {}, sessions = [], onSessio
     </div>
   )
 
-  // Home
   return (
     <div style={{ padding:'20px 16px 100px' }}>
-      <div style={{ textAlign:'center', marginBottom:'32px', paddingTop:'12px' }}>
+      <div style={{ textAlign:'center', marginBottom:'28px', paddingTop:'12px' }}>
         <div className="font-display" style={{ fontSize:'1.3rem', color:'var(--gold)', letterSpacing:'0.15em' }}>♠ EINTRAG</div>
       </div>
 
-      {/* Live session banner if exists */}
+      {/* Live session banner */}
       {hasLive && (
         <div style={{ marginBottom:'16px', padding:'14px 16px', borderRadius:'12px', background:'rgba(74,222,128,0.08)', border:'1px solid rgba(74,222,128,0.3)', display:'flex', alignItems:'center', gap:'12px' }}>
           <div style={{ fontSize:'1.2rem' }}>🟢</div>
@@ -698,22 +862,31 @@ export default function Eintrag({ players, avatars = {}, sessions = [], onSessio
         </div>
       )}
 
-      {/* Main button */}
+      {/* Main buttons */}
       <button onClick={() => setMode('live')}
-        style={{ width:'100%', padding:'24px', borderRadius:'16px', border:'2px solid rgba(201,168,76,0.4)', background:'rgba(201,168,76,0.08)', color:'var(--gold)', fontFamily:'Cinzel,serif', fontSize:'1.1rem', letterSpacing:'0.12em', cursor:'pointer', marginBottom:'16px', display:'flex', alignItems:'center', justifyContent:'center', gap:'12px' }}>
+        style={{ width:'100%', padding:'24px', borderRadius:'16px', border:'2px solid rgba(201,168,76,0.4)', background:'rgba(201,168,76,0.08)', color:'var(--gold)', fontFamily:'Cinzel,serif', fontSize:'1.1rem', letterSpacing:'0.12em', cursor:'pointer', marginBottom:'12px', display:'flex', alignItems:'center', justifyContent:'center', gap:'12px' }}>
         ▶ LIVE SESSION STARTEN
       </button>
 
-      {/* Divider */}
-      <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px', marginTop:'8px' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px', marginTop:'4px' }}>
         <div style={{ flex:1, height:'1px', background:'rgba(255,255,255,0.07)' }} />
         <div style={{ fontSize:'0.65rem', color:'var(--text-muted)', fontFamily:'Cinzel,serif', letterSpacing:'0.1em' }}>ODER</div>
         <div style={{ flex:1, height:'1px', background:'rgba(255,255,255,0.07)' }} />
       </div>
 
-      <button onClick={() => setMode('manual')} className="btn-ghost" style={{ width:'100%', fontSize:'0.8rem' }}>
+      <button onClick={() => setMode('manual')} className="btn-ghost" style={{ width:'100%', fontSize:'0.8rem', marginBottom:'28px' }}>
         ✏️ Manuell eintragen
       </button>
+
+      {/* Trennlinie vor Spieler des Monats */}
+      <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'20px' }}>
+        <div style={{ flex:1, height:'1px', background:'rgba(201,168,76,0.15)' }} />
+        <div style={{ fontSize:'0.5rem', color:'rgba(201,168,76,0.4)', fontFamily:'Cinzel,serif', letterSpacing:'0.2em' }}>HALL OF FAME</div>
+        <div style={{ flex:1, height:'1px', background:'rgba(201,168,76,0.15)' }} />
+      </div>
+
+      {/* Spieler des Monats */}
+      <PlayerOfMonth sessions={sessions} avatars={avatars} />
     </div>
   )
 }
