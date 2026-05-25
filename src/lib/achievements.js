@@ -240,6 +240,78 @@ export const ACHIEVEMENTS = [
     },
   },
   {
+    id: 'potm_1', icon: '👑', name: 'SPIELER DES MONATS',
+    desc: 'Mindestens 1× Spieler des Monats geworden',
+    tier: 'advanced',
+    holders: (stats, all) => {
+      const monthSet = [...new Set(all.map(s => s.date.slice(0, 7)))].sort()
+      const winners = new Set()
+      monthSet.forEach(ym => {
+        const [year, month] = ym.split('-').map(Number)
+        const ms = all.filter(s => { const d = new Date(s.date); return d.getFullYear() === year && d.getMonth() + 1 === month })
+        if (ms.length === 0) return
+        const st = {}
+        ms.forEach(s => {
+          if (!st[s.player_name]) st[s.player_name] = { sessions: 0, profit: 0, wins: 0, bestSession: -Infinity, totalRebuys: 0 }
+          const p = st[s.player_name], profit = s.cash_out - s.buy_in
+          p.sessions++; p.profit += profit; if (profit > 0) p.wins++
+          if (profit > p.bestSession) p.bestSession = profit
+          p.totalRebuys += (s.rebuy_count || 0)
+        })
+        const candidates = Object.values(st).filter(p => p.sessions >= 2)
+        const pool = candidates.length > 0 ? candidates : Object.values(st)
+        if (pool.length === 0) return
+        const profits = pool.map(p => p.profit)
+        const maxP = Math.max(...profits), minP = Math.min(...profits), range = maxP - minP || 1
+        const scored = pool.map(p => ({
+          ...p,
+          score: ((p.profit - minP) / range) * 40 + (p.wins / p.sessions) * 30 +
+            Math.min(p.sessions / 6, 1) * 15 + Math.max(0, Math.min(p.bestSession / 100, 1)) * 5 +
+            (10 - Math.min(p.totalRebuys / p.sessions, 1) * 10)
+        }))
+        const winner = scored.sort((a, b) => b.score - a.score)[0]
+        if (winner) winners.add(winner.name)
+      })
+      return [...winners]
+    },
+  },
+  {
+    id: 'potm_3', icon: '👑', name: 'DAUERKÖNIG',
+    desc: '3× Spieler des Monats geworden',
+    tier: 'expert',
+    holders: (stats, all) => {
+      const monthSet = [...new Set(all.map(s => s.date.slice(0, 7)))].sort()
+      const counts = {}
+      monthSet.forEach(ym => {
+        const [year, month] = ym.split('-').map(Number)
+        const ms = all.filter(s => { const d = new Date(s.date); return d.getFullYear() === year && d.getMonth() + 1 === month })
+        if (ms.length === 0) return
+        const st = {}
+        ms.forEach(s => {
+          if (!st[s.player_name]) st[s.player_name] = { sessions: 0, profit: 0, wins: 0, bestSession: -Infinity, totalRebuys: 0 }
+          const p = st[s.player_name], profit = s.cash_out - s.buy_in
+          p.sessions++; p.profit += profit; if (profit > 0) p.wins++
+          if (profit > p.bestSession) p.bestSession = profit
+          p.totalRebuys += (s.rebuy_count || 0)
+        })
+        const candidates = Object.values(st).filter(p => p.sessions >= 2)
+        const pool = candidates.length > 0 ? candidates : Object.values(st)
+        if (pool.length === 0) return
+        const profits = pool.map(p => p.profit)
+        const maxP = Math.max(...profits), minP = Math.min(...profits), range = maxP - minP || 1
+        const scored = pool.map(p => ({
+          ...p,
+          score: ((p.profit - minP) / range) * 40 + (p.wins / p.sessions) * 30 +
+            Math.min(p.sessions / 6, 1) * 15 + Math.max(0, Math.min(p.bestSession / 100, 1)) * 5 +
+            (10 - Math.min(p.totalRebuys / p.sessions, 1) * 10)
+        }))
+        const winner = scored.sort((a, b) => b.score - a.score)[0]
+        if (winner) counts[winner.name] = (counts[winner.name] || 0) + 1
+      })
+      return Object.entries(counts).filter(([, c]) => c >= 3).map(([n]) => n)
+    },
+  },
+  {
     id: 'collector_80', icon: '⭐', name: 'BADGE COLLECTOR',
     desc: '50% aller Achievements freigeschaltet',
     meta: true, holders: () => [],
