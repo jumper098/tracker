@@ -45,9 +45,9 @@ function calcPlayerOfMonth(sessions, yearMonth) {
 
   const scored = candidates.map(p => {
     const profitScore    = ((p.profit - minProfit) / profitRange) * 40
-    const winRateScore   = (p.wins / p.sessions) * 25
+    const winRateScore   = (p.wins / p.sessions) * 30
     const sessionsScore  = Math.min(p.sessions / 6, 1) * 15
-    const bestScore      = Math.max(0, Math.min(p.bestSession / 100, 1)) * 10
+    const bestScore      = Math.max(0, Math.min(p.bestSession / 100, 1)) * 5
     const rebuyPenalty   = Math.min(p.totalRebuys / p.sessions, 1) * 10
     return { ...p, score: profitScore + winRateScore + sessionsScore + bestScore + (10 - rebuyPenalty) }
   })
