@@ -6,10 +6,10 @@ import Avatar from '../components/Avatar'
 import { calcYearBadges } from '../lib/badges'
 
 // ─── Spieler des Monats ───────────────────────────────────────────────────────
-function calcPlayerOfMonth(sessions, yearMonth) {
+function calcMonthRanking(sessions, yearMonth) {
   const [year, month] = yearMonth.split('-').map(Number)
   const ms = sessions.filter(s => { const d = new Date(s.date); return d.getFullYear() === year && d.getMonth() + 1 === month })
-  if (ms.length === 0) return null
+  if (ms.length === 0) return []
   const st = {}
   ms.forEach(s => {
     if (!st[s.player_name]) st[s.player_name] = { name: s.player_name, sessions: 0, profit: 0, wins: 0, bestSession: -Infinity, totalRebuys: 0 }
@@ -18,17 +18,27 @@ function calcPlayerOfMonth(sessions, yearMonth) {
     if (profit > p.bestSession) p.bestSession = profit
     p.totalRebuys += (s.rebuy_count || 0)
   })
-  const candidates = Object.values(st).filter(p => p.sessions >= 2)
-  const pool = candidates.length > 0 ? candidates : Object.values(st)
-  if (pool.length === 0) return null
+  const pool = Object.values(st)
+  if (pool.length === 0) return []
   const profits = pool.map(p => p.profit)
   const maxP = Math.max(...profits), minP = Math.min(...profits), range = maxP - minP || 1
-  return pool.map(p => ({
-    ...p,
-    score: ((p.profit - minP) / range) * 40 + (p.wins / p.sessions) * 30 +
-      Math.min(p.sessions / 6, 1) * 15 + Math.max(0, Math.min(p.bestSession / 100, 1)) * 5 +
-      (10 - Math.min(p.totalRebuys / p.sessions, 1) * 10)
-  })).sort((a, b) => b.score - a.score)[0]
+  return pool.map(p => {
+    const profitScore  = ((p.profit - minP) / range) * 40
+    const winScore     = (p.wins / p.sessions) * 30
+    const sessScore    = Math.min(p.sessions / 6, 1) * 15
+    const bestScore    = Math.max(0, Math.min(p.bestSession / 100, 1)) * 5
+    const rebuyBonus   = (1 - Math.min(p.totalRebuys / p.sessions, 1)) * 10
+    const total = profitScore + winScore + sessScore + bestScore + rebuyBonus
+    return { ...p, profitScore, winScore, sessScore, bestScore, rebuyBonus, score: total, qualified: p.sessions >= 2 }
+  }).sort((a, b) => {
+    if (a.qualified !== b.qualified) return a.qualified ? -1 : 1
+    return b.score - a.score
+  })
+}
+
+function calcPlayerOfMonth(sessions, yearMonth) {
+  const ranking = calcMonthRanking(sessions, yearMonth)
+  return ranking.find(p => p.qualified) || ranking[0] || null
 }
 
 function getMonthLabel(yearMonth) {
@@ -36,55 +46,171 @@ function getMonthLabel(yearMonth) {
   return `${['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][month-1]} ${year}`
 }
 
-function PlayerOfMonth({ sessions, avatars }) {
-  const now = new Date()
-  const currentYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
-  const current = calcPlayerOfMonth(sessions, currentYM)
-  const pastMonths = [...new Set(sessions.map(s => s.date.slice(0,7)))].filter(m => m !== currentYM).sort((a,b) => b.localeCompare(a))
-  if (!current && pastMonths.length === 0) return null
+const RANK_COLORS = ['var(--gold)', '#94a3b8', '#cd7f32']
+const RANK_BG = ['rgba(201,168,76,0.12)', 'rgba(148,163,184,0.08)', 'rgba(205,127,50,0.08)']
+const RANK_BORDER = ['rgba(201,168,76,0.4)', 'rgba(148,163,184,0.2)', 'rgba(205,127,50,0.2)']
+const RANK_MEDAL = ['🥇', '🥈', '🥉']
+
+function RankingModal({ sessions, yearMonth, avatars, onClose }) {
+  const ranking = calcMonthRanking(sessions, yearMonth)
+  const qualified = ranking.filter(p => p.qualified)
+  const unqualified = ranking.filter(p => !p.qualified)
+
   return (
-    <div style={{ marginBottom:'24px' }}>
-      {current ? (
-        <div style={{ position:'relative', borderRadius:'20px', overflow:'hidden', background:'linear-gradient(135deg,rgba(201,168,76,0.12) 0%,rgba(10,10,12,0.95) 60%)', border:'1px solid rgba(201,168,76,0.35)', padding:'20px', marginBottom:'12px' }}>
-          <div style={{ position:'absolute', top:'20px', left:'20px', width:'80px', height:'80px', borderRadius:'50%', background:'radial-gradient(circle,rgba(201,168,76,0.25) 0%,transparent 70%)', filter:'blur(12px)', pointerEvents:'none' }} />
-          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'16px' }}>
-            <div style={{ fontSize:'1.1rem', flexShrink:0, filter:'drop-shadow(0 0 6px rgba(201,168,76,0.8))', animation:'crownFloat 3s ease-in-out infinite' }}>👑</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:'2px' }}>
-              <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.8rem', fontWeight:'700', color:'rgba(201,168,76,0.9)', letterSpacing:'0.15em' }}>SPIELER DES MONATS</div>
-              <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.7rem', fontWeight:'600', color:'rgba(201,168,76,0.6)', letterSpacing:'0.12em' }}>{getMonthLabel(currentYM).toUpperCase()}</div>
-            </div>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.88)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:600, padding:'0' }}
+      onClick={onClose}>
+      <div style={{ width:'100%', maxWidth:'480px', maxHeight:'88vh', overflowY:'auto', borderRadius:'20px 20px 0 0', background:'#0f1318', border:'1px solid rgba(201,168,76,0.2)', padding:'24px 20px 40px' }}
+        onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
+          <div>
+            <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.9rem', color:'var(--gold)', fontWeight:700 }}>📊 MONATSRANGLISTE</div>
+            <div style={{ fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'2px' }}>{getMonthLabel(yearMonth)}</div>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:'16px' }}>
-            <div style={{ position:'relative', flexShrink:0 }}>
-              <div style={{ position:'absolute', inset:'-4px', borderRadius:'50%', background:'conic-gradient(from 0deg,#C9A84C,#f5d885,#C9A84C,#8a6a1a,#C9A84C)', animation:'ringRotate 4s linear infinite' }} />
-              <div style={{ position:'relative', zIndex:1, background:'#0a0a0c', borderRadius:'50%', padding:'3px' }}>
-                <Avatar name={current.name} avatars={avatars} size={68} />
-              </div>
+          <button onClick={onClose} style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'8px', color:'var(--text-muted)', padding:'6px 12px', cursor:'pointer', fontSize:'0.8rem' }}>✕</button>
+        </div>
+
+        {/* Kriterien */}
+        <div style={{ marginBottom:'20px', padding:'14px', borderRadius:'12px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)' }}>
+          <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.55rem', color:'rgba(201,168,76,0.5)', letterSpacing:'0.15em', marginBottom:'10px' }}>BEWERTUNGSKRITERIEN</div>
+          {[
+            { label:'Gesamtprofit im Monat', pts:'40 Pkt', color:'#4ade80' },
+            { label:'Winrate (Gewinn-Sessions)', pts:'30 Pkt', color:'#a78bfa' },
+            { label:'Anzahl Sessions', pts:'15 Pkt', color:'#60a5fa' },
+            { label:'Bestes Einzelergebnis', pts:'5 Pkt', color:'#fbbf24' },
+            { label:'Wenig Rebuys (Bonus)', pts:'10 Pkt', color:'#f472b6' },
+          ].map(c => (
+            <div key={c.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+              <span style={{ fontSize:'0.72rem', color:'var(--text-muted)' }}>{c.label}</span>
+              <span style={{ fontFamily:'Cinzel,serif', fontSize:'0.7rem', color:c.color, flexShrink:0, marginLeft:'8px' }}>{c.pts}</span>
             </div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontFamily:'Cinzel,serif', fontSize:'1.25rem', color:'var(--gold)', letterSpacing:'0.05em', marginBottom:'8px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{current.name}</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
+          ))}
+          <div style={{ borderTop:'1px solid rgba(255,255,255,0.06)', marginTop:'8px', paddingTop:'8px', display:'flex', justifyContent:'space-between' }}>
+            <span style={{ fontSize:'0.7rem', color:'var(--text-muted)' }}>Mind. 2 Sessions für Wertung</span>
+            <span style={{ fontFamily:'Cinzel,serif', fontSize:'0.72rem', color:'var(--gold)' }}>= 100 Pkt</span>
+          </div>
+        </div>
+
+        {/* Rangliste */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+          {qualified.map((p, i) => (
+            <div key={p.name} style={{ padding:'12px 14px', borderRadius:'12px', background: RANK_BG[i] || 'rgba(255,255,255,0.02)', border:`1px solid ${RANK_BORDER[i] || 'rgba(255,255,255,0.06)'}` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
+                <span style={{ fontSize:'1.1rem', flexShrink:0 }}>{RANK_MEDAL[i] || `${i+1}.`}</span>
+                <Avatar name={p.name} avatars={avatars} size={32} />
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:'0.9rem', color: RANK_COLORS[i] || 'var(--text-primary)', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</div>
+                  <div style={{ fontSize:'0.6rem', color:'var(--text-muted)' }}>{p.sessions} Sessions · {Math.round(p.wins/p.sessions*100)}% Winrate</div>
+                </div>
+                <div style={{ fontFamily:'Cinzel,serif', fontSize:'1rem', color: RANK_COLORS[i] || 'var(--text-primary)', fontWeight:700, flexShrink:0 }}>
+                  {p.score.toFixed(1)}
+                </div>
+              </div>
+              {/* Punkte-Aufschlüsselung */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'4px' }}>
                 {[
-                  { label:'PROFIT', value:(current.profit>=0?'+':'')+current.profit.toFixed(0)+'€', color:current.profit>=0?'#4ade80':'#f87171' },
-                  { label:'SESSIONS', value:current.sessions, color:'#60a5fa' },
-                  { label:'WINRATE', value:Math.round(current.wins/current.sessions*100)+'%', color:'#a78bfa' },
+                  { label:'Profit', val:p.profitScore, color:'#4ade80' },
+                  { label:'Win%', val:p.winScore, color:'#a78bfa' },
+                  { label:'Sessions', val:p.sessScore, color:'#60a5fa' },
+                  { label:'Best', val:p.bestScore, color:'#fbbf24' },
+                  { label:'Rebuys', val:p.rebuyBonus, color:'#f472b6' },
                 ].map(s => (
-                  <div key={s.label} style={{ textAlign:'center', padding:'7px 4px', borderRadius:'10px', background:'rgba(0,0,0,0.3)', border:'1px solid rgba(255,255,255,0.06)' }}>
-                    <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.95rem', color:s.color, lineHeight:1 }}>{s.value}</div>
-                    <div style={{ fontSize:'0.45rem', color:'var(--text-muted)', letterSpacing:'0.15em', marginTop:'3px' }}>{s.label}</div>
+                  <div key={s.label} style={{ textAlign:'center', padding:'4px 2px', borderRadius:'6px', background:'rgba(0,0,0,0.25)' }}>
+                    <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.65rem', color:s.color }}>{s.val.toFixed(1)}</div>
+                    <div style={{ fontSize:'0.45rem', color:'rgba(255,255,255,0.3)', marginTop:'1px' }}>{s.label}</div>
                   </div>
                 ))}
               </div>
             </div>
+          ))}
+
+          {unqualified.length > 0 && (
+            <>
+              <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.5rem', color:'rgba(255,255,255,0.15)', letterSpacing:'0.15em', margin:'4px 0 2px 2px' }}>NICHT QUALIFIZIERT ({"<"}2 Sessions)</div>
+              {unqualified.map(p => (
+                <div key={p.name} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'9px 12px', borderRadius:'10px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.05)', opacity:0.5 }}>
+                  <Avatar name={p.name} avatars={avatars} size={26} />
+                  <div style={{ flex:1, fontSize:'0.8rem', color:'var(--text-muted)' }}>{p.name}</div>
+                  <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.75rem', color:'var(--text-muted)' }}>{p.score.toFixed(1)} Pkt</div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PlayerOfMonth({ sessions, avatars }) {
+  const [modalYM, setModalYM] = useState(null)
+  const now = new Date()
+  const currentYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+  const ranking = calcMonthRanking(sessions, currentYM)
+  const top3 = ranking.filter(p => p.qualified).slice(0, 3)
+  const pastMonths = [...new Set(sessions.map(s => s.date.slice(0,7)))].filter(m => m !== currentYM).sort((a,b) => b.localeCompare(a))
+
+  if (top3.length === 0 && pastMonths.length === 0) return null
+
+  return (
+    <div style={{ marginBottom:'24px' }}>
+
+      {/* ── Aktueller Monat ── */}
+      <div style={{ borderRadius:'20px', background:'linear-gradient(135deg,rgba(201,168,76,0.1) 0%,rgba(10,10,12,0.95) 60%)', border:'1px solid rgba(201,168,76,0.3)', padding:'18px', marginBottom:'12px' }}>
+
+        {/* Header */}
+        <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'16px' }}>
+          <div style={{ fontSize:'1.1rem', filter:'drop-shadow(0 0 6px rgba(201,168,76,0.8))', animation:'crownFloat 3s ease-in-out infinite' }}>👑</div>
+          <div>
+            <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.8rem', fontWeight:700, color:'rgba(201,168,76,0.9)', letterSpacing:'0.15em' }}>SPIELER DES MONATS</div>
+            <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.7rem', fontWeight:600, color:'rgba(201,168,76,0.6)', letterSpacing:'0.12em' }}>{getMonthLabel(currentYM).toUpperCase()}</div>
           </div>
         </div>
-      ) : (
-        <div style={{ padding:'18px', borderRadius:'16px', marginBottom:'12px', border:'1px dashed rgba(201,168,76,0.2)', textAlign:'center' }}>
-          <div style={{ fontSize:'1.4rem', marginBottom:'6px', opacity:0.4 }}>👑</div>
-          <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.65rem', color:'var(--text-muted)', letterSpacing:'0.12em' }}>NOCH KEIN SIEGER — {getMonthLabel(currentYM).toUpperCase()}</div>
-          <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.2)', marginTop:'4px' }}>Mind. 2 Sessions nötig</div>
-        </div>
-      )}
+
+        {top3.length === 0 ? (
+          <div style={{ textAlign:'center', padding:'12px 0', opacity:0.5 }}>
+            <div style={{ fontSize:'0.7rem', color:'var(--text-muted)' }}>Noch keine qualifizierten Spieler (mind. 2 Sessions)</div>
+          </div>
+        ) : (
+          <>
+            {/* Top 3 */}
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {top3.map((p, i) => (
+                <div key={p.name} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', borderRadius:'12px', background: RANK_BG[i], border:`1px solid ${RANK_BORDER[i]}`, cursor:'pointer' }}
+                  onClick={() => setModalYM(currentYM)}>
+                  <span style={{ fontSize:'1.1rem', flexShrink:0 }}>{RANK_MEDAL[i]}</span>
+                  {i === 0 ? (
+                    <div style={{ position:'relative', flexShrink:0 }}>
+                      <div style={{ position:'absolute', inset:'-3px', borderRadius:'50%', background:'conic-gradient(from 0deg,#C9A84C,#f5d885,#C9A84C,#8a6a1a,#C9A84C)', animation:'ringRotate 4s linear infinite' }} />
+                      <div style={{ position:'relative', zIndex:1, background:'#0a0a0c', borderRadius:'50%', padding:'2px' }}>
+                        <Avatar name={p.name} avatars={avatars} size={38} />
+                      </div>
+                    </div>
+                  ) : (
+                    <Avatar name={p.name} avatars={avatars} size={38} />
+                  )}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:'0.9rem', color: RANK_COLORS[i], fontWeight: i===0?700:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</div>
+                    <div style={{ fontSize:'0.6rem', color:'var(--text-muted)', marginTop:'1px' }}>
+                      {(p.profit>=0?'+':'')+p.profit.toFixed(0)}€ · {p.sessions}× · {Math.round(p.wins/p.sessions*100)}%
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.95rem', color: RANK_COLORS[i], fontWeight:700 }}>{p.score.toFixed(1)}</div>
+                    <div style={{ fontSize:'0.5rem', color:'var(--text-muted)', letterSpacing:'0.1em' }}>PKT</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => setModalYM(currentYM)} style={{ width:'100%', marginTop:'10px', padding:'8px', borderRadius:'10px', border:'1px solid rgba(201,168,76,0.2)', background:'rgba(201,168,76,0.05)', color:'rgba(201,168,76,0.5)', fontFamily:'Cinzel,serif', fontSize:'0.6rem', letterSpacing:'0.1em', cursor:'pointer' }}>
+              VOLLSTÄNDIGE RANGLISTE →
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* ── Vergangene Sieger ── */}
       {pastMonths.length > 0 && (
         <div>
           <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.5rem', color:'rgba(255,255,255,0.2)', letterSpacing:'0.18em', marginBottom:'8px', paddingLeft:'2px' }}>VERGANGENE SIEGER</div>
@@ -92,28 +218,25 @@ function PlayerOfMonth({ sessions, avatars }) {
             {pastMonths.map(ym => {
               const winner = calcPlayerOfMonth(sessions, ym)
               if (!winner) return null
-              const winRate = Math.round(winner.wins / winner.sessions * 100)
               return (
-                <div key={ym} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'9px 12px', borderRadius:'12px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)' }}>
+                <div key={ym} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'9px 12px', borderRadius:'12px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)', cursor:'pointer' }}
+                  onClick={() => setModalYM(ym)}>
                   <Avatar name={winner.name} avatars={avatars} size={28} />
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:'0.82rem', color:'var(--text-primary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{winner.name}</div>
                     <div style={{ fontSize:'0.58rem', color:'var(--text-muted)', marginTop:'1px' }}>{getMonthLabel(ym)}</div>
                   </div>
-                  <div style={{ display:'flex', gap:'6px', alignItems:'center', flexShrink:0 }}>
-                    <span style={{ fontFamily:'Cinzel,serif', fontSize:'0.72rem', color:winner.profit>=0?'#4ade80':'#f87171' }}>{winner.profit>=0?'+':''}{winner.profit.toFixed(0)}€</span>
-                    <span style={{ fontSize:'0.55rem', color:'rgba(255,255,255,0.15)' }}>·</span>
-                    <span style={{ fontSize:'0.65rem', color:'#60a5fa' }}>{winner.sessions}×</span>
-                    <span style={{ fontSize:'0.55rem', color:'rgba(255,255,255,0.15)' }}>·</span>
-                    <span style={{ fontSize:'0.65rem', color:'#a78bfa' }}>{winRate}%</span>
-                    <span style={{ fontSize:'0.6rem', color:'rgba(201,168,76,0.4)', marginLeft:'2px' }}>👑</span>
-                  </div>
+                  <span style={{ fontSize:'0.7rem', color:'rgba(201,168,76,0.5)' }}>👑</span>
                 </div>
               )
             })}
           </div>
         </div>
       )}
+
+      {/* Modal */}
+      {modalYM && <RankingModal sessions={sessions} yearMonth={modalYM} avatars={avatars} onClose={() => setModalYM(null)} />}
+
       <style>{`
         @keyframes crownFloat { 0%,100%{transform:translateY(0px) rotate(-5deg)} 50%{transform:translateY(-4px) rotate(5deg)} }
         @keyframes ringRotate { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
