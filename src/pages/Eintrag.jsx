@@ -96,14 +96,14 @@ function RankingModal({ sessions, yearMonth, avatars, onClose }) {
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'4px' }}>
                 {[
-                  { label:'Profit', val:p.profitScore, color:'#4ade80' },
-                  { label:'Win%', val:p.winScore, color:'#a78bfa' },
-                  { label:'Sessions', val:p.sessScore, color:'#60a5fa' },
-                  { label:'Best', val:p.bestScore, color:'#fbbf24' },
-                  { label:'Rebuys', val:p.rebuyBonus, color:'#f472b6' },
+                  { label:'Profit', val:(p.profit>=0?'+':'')+p.profit.toFixed(0)+'€', color:'#4ade80' },
+                  { label:'Win%', val:Math.round(p.wins/p.sessions*100)+'%', color:'#a78bfa' },
+                  { label:'Sessions', val:p.sessions+'×', color:'#60a5fa' },
+                  { label:'Best', val:(p.bestSession>=0?'+':'')+p.bestSession.toFixed(0)+'€', color:'#fbbf24' },
+                  { label:'Rebuys', val:p.totalRebuys+'×', color:'#f472b6' },
                 ].map(s => (
                   <div key={s.label} style={{ textAlign:'center', padding:'4px 2px', borderRadius:'6px', background:'rgba(0,0,0,0.25)' }}>
-                    <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.65rem', color:s.color }}>{s.val.toFixed(1)}</div>
+                    <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.65rem', color:s.color }}>{s.val}</div>
                     <div style={{ fontSize:'0.45rem', color:'rgba(255,255,255,0.3)', marginTop:'1px' }}>{s.label}</div>
                   </div>
                 ))}
