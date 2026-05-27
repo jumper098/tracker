@@ -30,9 +30,9 @@ function calcMonthRanking(sessions, yearMonth) {
   return pool.map(p => {
     const profitScore = ((p.profit - minP) / range) * 40
     const winScore    = (p.wins / p.sessions) * 30
-    const sessScore   = Math.min(p.sessions / 6, 1) * 15
+    const sessScore   = Math.min(p.sessions / 6, 1) * 20
     const bestScore   = Math.max(0, Math.min(p.bestSession / 100, 1)) * 5
-    const rebuyBonus  = (1 - Math.min(p.totalRebuys / p.sessions, 1)) * 10
+    const rebuyBonus  = (1 - Math.min(p.totalRebuys / p.sessions, 1)) * 5
     return { ...p, profitScore, winScore, sessScore, bestScore, rebuyBonus, score: profitScore + winScore + sessScore + bestScore + rebuyBonus, qualified: p.sessions >= 2 }
   }).sort((a, b) => a.qualified !== b.qualified ? (a.qualified ? -1 : 1) : b.score - a.score)
 }
@@ -68,9 +68,9 @@ function RankingModal({ sessions, yearMonth, avatars, onClose }) {
           {[
             { label:'Gesamtprofit im Monat', pts:'40 Pkt', color:'#4ade80' },
             { label:'Winrate (Gewinn-Sessions)', pts:'30 Pkt', color:'#a78bfa' },
-            { label:'Anzahl Sessions', pts:'15 Pkt', color:'#60a5fa' },
+            { label:'Anzahl Sessions', pts:'20 Pkt', color:'#60a5fa' },
             { label:'Bestes Einzelergebnis', pts:'5 Pkt', color:'#fbbf24' },
-            { label:'Wenig Rebuys (Bonus)', pts:'10 Pkt', color:'#f472b6' },
+            { label:'Wenig Rebuys (Bonus)', pts:'5 Pkt', color:'#f472b6' },
           ].map(c => (
             <div key={c.label} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
               <span style={{ fontSize:'0.72rem', color:'var(--text-muted)' }}>{c.label}</span>
@@ -979,16 +979,7 @@ export default function Eintrag({ players, avatars = {}, sessions = [], onSessio
         ▶ LIVE SESSION STARTEN
       </button>
 
-      {/* Divider */}
-      <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'16px', marginTop:'8px' }}>
-        <div style={{ flex:1, height:'1px', background:'rgba(255,255,255,0.07)' }} />
-        <div style={{ fontSize:'0.65rem', color:'var(--text-muted)', fontFamily:'Cinzel,serif', letterSpacing:'0.1em' }}>ODER</div>
-        <div style={{ flex:1, height:'1px', background:'rgba(255,255,255,0.07)' }} />
-      </div>
 
-      <button onClick={() => setMode('manual')} className="btn-ghost" style={{ width:'100%', fontSize:'0.8rem' }}>
-        ✏️ Manuell eintragen
-      </button>
 
       <div style={{ display:'flex', alignItems:'center', gap:'10px', margin:'28px 0 20px' }}>
         <div style={{ flex:1, height:'1px', background:'rgba(201,168,76,0.15)' }} />
