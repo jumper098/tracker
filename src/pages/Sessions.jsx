@@ -36,6 +36,7 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
   const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a))
   const yearBadges = calcYearBadges(sessions)
 
+
   // Year filter
   const years = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
   const filteredDates = yearFilter === 'all' ? sortedDates : sortedDates.filter(d => d.startsWith(yearFilter))

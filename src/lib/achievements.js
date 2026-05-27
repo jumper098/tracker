@@ -263,12 +263,7 @@ export const ACHIEVEMENTS = [
         if (pool.length === 0) return
         const profits = pool.map(p => p.profit)
         const maxP = Math.max(...profits), minP = Math.min(...profits), range = maxP - minP || 1
-        const scored = pool.map(p => ({
-          ...p,
-          score: ((p.profit - minP) / range) * 40 + (p.wins / p.sessions) * 30 +
-            Math.min(p.sessions / 6, 1) * 15 + Math.max(0, Math.min(p.bestSession / 100, 1)) * 5 +
-            (10 - Math.min(p.totalRebuys / p.sessions, 1) * 10)
-        }))
+        const scored = pool.map(p => ({ ...p, score: ((p.profit-minP)/range)*40 + (p.wins/p.sessions)*30 + Math.min(p.sessions/6,1)*15 + Math.max(0,Math.min(p.bestSession/100,1))*5 + (10-Math.min(p.totalRebuys/p.sessions,1)*10) }))
         const winner = scored.sort((a, b) => b.score - a.score)[0]
         if (winner?.name) winners.add(winner.name)
       })
@@ -299,12 +294,7 @@ export const ACHIEVEMENTS = [
         if (pool.length === 0) return
         const profits = pool.map(p => p.profit)
         const maxP = Math.max(...profits), minP = Math.min(...profits), range = maxP - minP || 1
-        const scored = pool.map(p => ({
-          ...p,
-          score: ((p.profit - minP) / range) * 40 + (p.wins / p.sessions) * 30 +
-            Math.min(p.sessions / 6, 1) * 15 + Math.max(0, Math.min(p.bestSession / 100, 1)) * 5 +
-            (10 - Math.min(p.totalRebuys / p.sessions, 1) * 10)
-        }))
+        const scored = pool.map(p => ({ ...p, score: ((p.profit-minP)/range)*40 + (p.wins/p.sessions)*30 + Math.min(p.sessions/6,1)*15 + Math.max(0,Math.min(p.bestSession/100,1))*5 + (10-Math.min(p.totalRebuys/p.sessions,1)*10) }))
         const winner = scored.sort((a, b) => b.score - a.score)[0]
         if (winner?.name) counts[winner.name] = (counts[winner.name] || 0) + 1
       })
