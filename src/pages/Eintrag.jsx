@@ -266,6 +266,9 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
   const [addPlayerName, setAddPlayerName] = useState('')
   const [removeConfirm, setRemoveConfirm] = useState(null)
   const [endConfirm, setEndConfirm] = useState(false)
+  const [seatDrawModal, setSeatDrawModal] = useState(false)
+  const [seatResult, setSeatResult] = useState(null)
+  const [drawing, setDrawing] = useState(false)
 
   useEffect(() => {
     db.from('live_session').select('data').eq('id', 'current').single()
@@ -382,6 +385,22 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
     showToast(`✓ ${playerName} entfernt`)
   }
 
+  function drawSeats() {
+    const s = sessionRef.current
+    if (!s) return
+    setDrawing(true)
+    setSeatResult(null)
+    setSeatDrawModal(true)
+    // Shuffle animation delay
+    setTimeout(() => {
+      const names = s.players.map(p => p.name)
+      const shuffled = [...names].sort(() => Math.random() - 0.5)
+      const result = shuffled.map((name, i) => ({ name, seat: i + 1 }))
+      setSeatResult(result)
+      setDrawing(false)
+    }, 1200)
+  }
+
   function addPlayer() {
     if (!addPlayerName) return
     const s = sessionRef.current
@@ -491,10 +510,16 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
             <div style={{ fontSize:'0.6rem', color:'var(--text-muted)' }}>GESAMTPOT</div>
           </div>
         </div>
-        <button onClick={() => setAddPlayerModal(true)}
-          style={{ width:'100%', padding:'8px', borderRadius:'8px', border:'1px solid rgba(96,165,250,0.35)', background:'rgba(96,165,250,0.08)', color:'#60a5fa', fontFamily:'Cinzel,serif', fontSize:'0.7rem', letterSpacing:'0.08em', cursor:'pointer' }}>
-          + SPIELER HINZUFÜGEN
-        </button>
+        <div style={{ display:'flex', gap:'8px' }}>
+          <button onClick={() => setAddPlayerModal(true)}
+            style={{ flex:1, padding:'8px', borderRadius:'8px', border:'1px solid rgba(96,165,250,0.35)', background:'rgba(96,165,250,0.08)', color:'#60a5fa', fontFamily:'Cinzel,serif', fontSize:'0.7rem', letterSpacing:'0.08em', cursor:'pointer' }}>
+            + SPIELER
+          </button>
+          <button onClick={drawSeats}
+            style={{ flex:1, padding:'8px', borderRadius:'8px', border:'1px solid rgba(167,139,250,0.35)', background:'rgba(167,139,250,0.08)', color:'#a78bfa', fontFamily:'Cinzel,serif', fontSize:'0.7rem', letterSpacing:'0.08em', cursor:'pointer' }}>
+            🎲 PLÄTZE
+          </button>
+        </div>
       </div>
 
       {session.players.map(p => {
@@ -659,6 +684,61 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                 style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(248,113,113,0.4)', background:'rgba(248,113,113,0.1)', color:'#f87171', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
                 ✓ Entfernen
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {seatDrawModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
+          onClick={() => { setSeatDrawModal(false); setSeatResult(null) }}>
+          <div className="card" style={{ maxWidth:'340px', width:'100%', padding:'28px 24px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign:'center', marginBottom:'20px' }}>
+              <div className="font-display" style={{ fontSize:'1rem', color:'#a78bfa', letterSpacing:'0.12em' }}>🎲 PLATZAUSLOSUNG</div>
+              <div style={{ fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'4px' }}>{session?.players.length} Spieler</div>
+            </div>
+
+            {drawing ? (
+              <div style={{ textAlign:'center', padding:'32px 0' }}>
+                <div style={{ fontSize:'2.5rem', animation:'spin 0.4s linear infinite' }}>🎲</div>
+                <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.75rem', color:'var(--text-muted)', marginTop:'12px', letterSpacing:'0.1em' }}>WIRD AUSGELOST…</div>
+                <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
+              </div>
+            ) : seatResult ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'20px' }}>
+                {seatResult.map(({ name, seat }) => (
+                  <div key={name} style={{
+                    display:'flex', alignItems:'center', gap:'12px',
+                    padding:'10px 14px', borderRadius:'10px',
+                    background: seat === 1 ? 'rgba(201,168,76,0.12)' : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${seat === 1 ? 'rgba(201,168,76,0.4)' : 'rgba(255,255,255,0.07)'}`,
+                  }}>
+                    <div style={{
+                      width:'32px', height:'32px', borderRadius:'50%', flexShrink:0,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      background: seat === 1 ? 'rgba(201,168,76,0.25)' : 'rgba(167,139,250,0.15)',
+                      border: `1px solid ${seat === 1 ? 'rgba(201,168,76,0.5)' : 'rgba(167,139,250,0.3)'}`,
+                      fontFamily:'Cinzel,serif', fontSize:'0.9rem',
+                      color: seat === 1 ? 'var(--gold)' : '#a78bfa', fontWeight:'700',
+                    }}>{seat}</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:'0.9rem', color: seat === 1 ? 'var(--gold)' : 'var(--text-primary)', fontWeight: seat === 1 ? 600 : 400 }}>{name}</div>
+                      <div style={{ fontSize:'0.6rem', color:'var(--text-muted)', marginTop:'1px' }}>Platz {seat}</div>
+                    </div>
+                    {seat === 1 && <div style={{ fontSize:'1rem' }}>🃏</div>}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button className="btn-ghost" style={{ flex:1 }} onClick={() => { setSeatDrawModal(false); setSeatResult(null) }}>Schließen</button>
+              {seatResult && (
+                <button onClick={drawSeats}
+                  style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(167,139,250,0.4)', background:'rgba(167,139,250,0.12)', color:'#a78bfa', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
+                  🎲 Nochmal
+                </button>
+              )}
             </div>
           </div>
         </div>
