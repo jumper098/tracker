@@ -12,6 +12,7 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
   const [openNights, setOpenNights] = useState({})
   const [settlementNight, setSettlementNight] = useState(null)
   const [confirm, setConfirm] = useState(null)
+  const [view, setView] = useState('sessions') // 'sessions' | 'monat'
   const [yearFilter, setYearFilter] = useState(() => {
     const yrs = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
     return yrs.length > 0 ? yrs[0] : 'all'
@@ -26,6 +27,44 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
   const [editingNote, setEditingNote] = useState(null) // date
   const [noteText, setNoteText] = useState('')
   const touchStartX = useRef(0)
+
+  // Monthly view state
+  const now = new Date()
+  const allMonths = [...new Set(sessions.map(s => s.date.slice(0, 7)))].sort((a, b) => b.localeCompare(a))
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    return allMonths.includes(cur) ? cur : (allMonths[0] || cur)
+  })
+
+  function getMonthLabel(ym) {
+    const [y, m] = ym.split('-').map(Number)
+    return `${['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'][m-1]} ${y}`
+  }
+
+  function calcMonthlySettlement(monthSessions) {
+    // Sum up profit per player
+    const balances = {}
+    monthSessions.forEach(s => {
+      const profit = s.cash_out - s.buy_in
+      balances[s.player_name] = (balances[s.player_name] || 0) + profit
+    })
+    // Use existing settlement logic: creditors pay debtors
+    const debtors = Object.entries(balances).filter(([,v]) => v < 0).map(([n,v]) => ({ name: n, amount: -v })).sort((a,b) => b.amount - a.amount)
+    const creditors = Object.entries(balances).filter(([,v]) => v > 0).map(([n,v]) => ({ name: n, amount: v })).sort((a,b) => b.amount - a.amount)
+    const transfers = []
+    const d = debtors.map(x => ({ ...x }))
+    const c = creditors.map(x => ({ ...x }))
+    let di = 0, ci = 0
+    while (di < d.length && ci < c.length) {
+      const amt = Math.min(d[di].amount, c[ci].amount)
+      if (amt > 0.005) transfers.push({ from: d[di].name, to: c[ci].name, amount: Math.round(amt * 100) / 100 })
+      d[di].amount -= amt
+      c[ci].amount -= amt
+      if (d[di].amount < 0.005) di++
+      if (c[ci].amount < 0.005) ci++
+    }
+    return { balances, transfers }
+  }
 
   // Group sessions by date
   const byDate = {}
@@ -161,8 +200,154 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
         <div className="font-display" style={{ fontSize: '1.3rem', color: 'var(--gold)', letterSpacing: '0.15em' }}>
           ♠ SESSIONS
         </div>
-
       </div>
+
+      {/* View Toggle */}
+      <div style={{ display:'flex', gap:'8px', marginBottom:'16px', background:'rgba(0,0,0,0.2)', borderRadius:'12px', padding:'4px' }}>
+        {[['sessions','📋 Einzeln'],['monat','📊 Monatsabrechnung']].map(([v, label]) => (
+          <button key={v} onClick={() => setView(v)}
+            style={{ flex:1, padding:'10px', borderRadius:'9px', border:'none', cursor:'pointer', fontFamily:'Cinzel,serif', fontSize:'0.72rem', letterSpacing:'0.06em', transition:'all 0.2s',
+              background: view === v ? 'rgba(201,168,76,0.2)' : 'transparent',
+              color: view === v ? 'var(--gold)' : 'var(--text-muted)',
+              borderColor: view === v ? 'rgba(201,168,76,0.4)' : 'transparent' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── MONATSABRECHNUNG VIEW ── */}
+      {view === 'monat' && (() => {
+        const monthSessions = sessions.filter(s => s.date.startsWith(selectedMonth))
+        const { balances, transfers } = monthSessions.length > 0 ? calcMonthlySettlement(monthSessions) : { balances: {}, transfers: [] }
+        const players = Object.entries(balances).sort((a, b) => b[1] - a[1])
+        const totalSessions = [...new Set(monthSessions.map(s => s.date))].length
+        const totalPotMonth = monthSessions.reduce((s, e) => s + e.buy_in, 0)
+
+        function shareWhatsApp() {
+          const lines = [
+            `♠ Monatsabrechnung ${getMonthLabel(selectedMonth)}`,
+            `${totalSessions} Spielabende · Pot gesamt: ${totalPotMonth.toFixed(0)}€`,
+            '',
+            '📊 Ergebnisse:',
+            ...players.map(([name, profit]) => {
+              const sessions = monthSessions.filter(s => s.player_name === name).length
+              return `${profit >= 0 ? '🟢' : '🔴'} ${name}: ${profit >= 0 ? '+' : ''}${profit.toFixed(0)}€ (${sessions}×)`
+            }),
+            '',
+            transfers.length > 0 ? '💸 Ausgleich:' : '✅ Alles ausgeglichen!',
+            ...transfers.map(t => `${t.from} → ${t.to}: ${t.amount.toFixed(2)}€`),
+            '',
+            '♠ All In Poker Tracker',
+          ].join('\n')
+          if (navigator.share) {
+            navigator.share({ text: lines })
+          } else {
+            navigator.clipboard.writeText(lines)
+            showToast('✓ In Zwischenablage kopiert!')
+          }
+        }
+
+        return (
+          <div>
+            {/* Month selector */}
+            <div style={{ display:'flex', gap:'6px', marginBottom:'16px', overflowX:'auto', paddingBottom:'4px' }}>
+              {allMonths.map(ym => (
+                <button key={ym} onClick={() => setSelectedMonth(ym)}
+                  className="btn-ghost"
+                  style={{ flexShrink:0, fontSize:'0.7rem', padding:'6px 12px',
+                    background: selectedMonth === ym ? 'rgba(201,168,76,0.2)' : undefined,
+                    borderColor: selectedMonth === ym ? 'rgba(201,168,76,0.5)' : undefined,
+                    color: selectedMonth === ym ? 'var(--gold)' : undefined }}>
+                  {getMonthLabel(ym).split(' ')[0].slice(0,3)} {ym.slice(2,4)}
+                </button>
+              ))}
+            </div>
+
+            {monthSessions.length === 0 ? (
+              <div className="empty-state">Keine Sessions in diesem Monat</div>
+            ) : (
+              <>
+                {/* Month summary */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px', marginBottom:'16px' }}>
+                  {[
+                    { label:'Spielabende', value: totalSessions },
+                    { label:'Spieler', value: players.length },
+                    { label:'Pot Total', value: totalPotMonth.toFixed(0)+'€' },
+                  ].map(s => (
+                    <div key={s.label} className="card" style={{ padding:'14px', textAlign:'center' }}>
+                      <div className="font-display" style={{ fontSize:'1.1rem', color:'var(--gold)' }}>{s.value}</div>
+                      <div className="section-label" style={{ marginBottom:0 }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Player results */}
+                <div className="card" style={{ marginBottom:'16px', padding:'16px' }}>
+                  <div className="font-display" style={{ fontSize:'0.72rem', color:'var(--gold)', marginBottom:'14px', letterSpacing:'0.12em' }}>
+                    📊 ERGEBNISSE {getMonthLabel(selectedMonth).toUpperCase()}
+                  </div>
+                  {players.map(([name, profit], i) => {
+                    const ps = monthSessions.filter(s => s.player_name === name)
+                    const wins = ps.filter(s => s.cash_out - s.buy_in > 0).length
+                    const totalBuyin = ps.reduce((s, e) => s + e.buy_in, 0)
+                    const totalCashout = ps.reduce((s, e) => s + e.cash_out, 0)
+                    return (
+                      <div key={name} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 0', borderBottom: i < players.length-1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                        <div style={{ width:'22px', textAlign:'center', fontFamily:'Cinzel,serif', fontSize:'0.75rem', color:'var(--text-muted)', flexShrink:0 }}>{i+1}.</div>
+                        <Avatar name={name} avatars={avatars} size={34} />
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:'0.9rem', fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</div>
+                          <div style={{ fontSize:'0.65rem', color:'var(--text-muted)', marginTop:'2px' }}>
+                            {ps.length}× Sessions · {wins}/{ps.length} Wins · Buy-In {totalBuyin.toFixed(0)}€
+                          </div>
+                        </div>
+                        <div style={{ textAlign:'right', flexShrink:0 }}>
+                          <div className={`font-display ${profit > 0 ? 'profit-pos' : profit < 0 ? 'profit-neg' : 'profit-neu'}`} style={{ fontSize:'1rem' }}>
+                            {profit >= 0 ? '+' : ''}{profit.toFixed(0)}€
+                          </div>
+                          <div style={{ fontSize:'0.6rem', color:'var(--text-muted)', marginTop:'1px' }}>Cash-Out: {totalCashout.toFixed(0)}€</div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Monthly settlement */}
+                <div className="card" style={{ marginBottom:'16px', padding:'16px' }}>
+                  <div className="font-display" style={{ fontSize:'0.72rem', color:'var(--gold)', marginBottom:'14px', letterSpacing:'0.12em' }}>
+                    💸 MONATSAUSGLEICH
+                  </div>
+                  {transfers.length === 0 ? (
+                    <div style={{ textAlign:'center', color:'#4ade80', padding:'12px 0', fontSize:'0.85rem' }}>✓ Alles ausgeglichen!</div>
+                  ) : (
+                    transfers.map((t, i) => (
+                      <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 12px', background:'rgba(0,0,0,0.2)', borderRadius:'8px', marginBottom:'8px', border:'1px solid rgba(201,168,76,0.1)' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                          <Avatar name={t.from} avatars={avatars} size={24} />
+                          <span style={{ color:'#f87171', fontSize:'0.85rem' }}>{t.from}</span>
+                          <span style={{ color:'var(--text-muted)' }}>→</span>
+                          <Avatar name={t.to} avatars={avatars} size={24} />
+                          <span style={{ color:'#4ade80', fontSize:'0.85rem' }}>{t.to}</span>
+                        </div>
+                        <div className="font-display" style={{ color:'var(--gold)', fontSize:'0.9rem' }}>{t.amount.toFixed(2)}€</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* WhatsApp share */}
+                <button onClick={shareWhatsApp}
+                  style={{ width:'100%', padding:'14px', borderRadius:'12px', border:'1px solid rgba(74,222,128,0.4)', background:'rgba(74,222,128,0.1)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.8rem', cursor:'pointer', letterSpacing:'0.08em', display:'flex', alignItems:'center', justifyContent:'center', gap:'10px' }}>
+                  📤 ALS NACHRICHT TEILEN
+                </button>
+              </>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* ── EINZELNE SESSIONS VIEW ── */}
+      {view === 'sessions' && (<>
 
       {/* Top 3 Last Night — always from most recent session overall */}
       {(() => {
@@ -438,7 +623,9 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
         )
       })}
 
-      {/* Lightbox */}
+      </>)}
+
+      {/* Lightbox — shown in both views */}
       {lightbox && (
         <div onClick={() => setLightbox(null)} style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)',
