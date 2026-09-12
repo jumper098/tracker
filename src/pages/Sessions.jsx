@@ -11,8 +11,8 @@ import { safeName } from '../lib/safeName'
 export default function Sessions({ sessions, onRefresh, avatars = {} }) {
   const [openNights, setOpenNights] = useState({})
   const [settlementNight, setSettlementNight] = useState(null)
+  const [showMonat, setShowMonat] = useState(false)
   const [confirm, setConfirm] = useState(null)
-  const [view, setView] = useState('sessions') // 'sessions' | 'monat'
   const [yearFilter, setYearFilter] = useState(() => {
     const yrs = [...new Set(sessions.map(s => s.date.slice(0, 4)))].sort((a, b) => b - a)
     return yrs.length > 0 ? yrs[0] : 'all'
@@ -202,21 +202,8 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
         </div>
       </div>
 
-      {/* View Toggle */}
-      <div style={{ display:'flex', gap:'8px', marginBottom:'16px', background:'rgba(0,0,0,0.2)', borderRadius:'12px', padding:'4px' }}>
-        {[['sessions','📋 Einzeln'],['monat','📊 Monatsabrechnung']].map(([v, label]) => (
-          <button key={v} onClick={() => setView(v)}
-            style={{ flex:1, padding:'10px', borderRadius:'9px', border:'none', cursor:'pointer', fontFamily:'Cinzel,serif', fontSize:'0.72rem', letterSpacing:'0.06em', transition:'all 0.2s',
-              background: view === v ? 'rgba(201,168,76,0.2)' : 'transparent',
-              color: view === v ? 'var(--gold)' : 'var(--text-muted)',
-              borderColor: view === v ? 'rgba(201,168,76,0.4)' : 'transparent' }}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── MONATSABRECHNUNG VIEW ── */}
-      {view === 'monat' && (() => {
+      {/* ── MONATSABRECHNUNG MODAL ── */}
+      {showMonat && (() => {
         const monthSessions = sessions.filter(s => s.date.startsWith(selectedMonth))
         const { balances, transfers } = monthSessions.length > 0 ? calcMonthlySettlement(monthSessions) : { balances: {}, transfers: [] }
         const players = Object.entries(balances).sort((a, b) => b[1] - a[1])
@@ -248,7 +235,13 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
         }
 
         return (
-          <div>
+          <div style={{ position:'fixed', inset:0, background:'#0a0a0c', zIndex:500, overflowY:'auto', padding:'20px 16px 100px' }}>
+            {/* Header */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'20px', paddingTop:'8px' }}>
+              <div className="font-display" style={{ fontSize:'1.1rem', color:'var(--gold)', letterSpacing:'0.12em' }}>📊 MONATSABRECHNUNG</div>
+              <button onClick={() => setShowMonat(false)}
+                style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'8px', color:'var(--text-muted)', padding:'6px 14px', cursor:'pointer', fontSize:'0.85rem' }}>✕</button>
+            </div>
             {/* Month selector */}
             <div style={{ display:'flex', gap:'6px', marginBottom:'16px', overflowX:'auto', paddingBottom:'4px' }}>
               {allMonths.map(ym => (
@@ -347,7 +340,7 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
       })()}
 
       {/* ── EINZELNE SESSIONS VIEW ── */}
-      {view === 'sessions' && (<>
+      {(()=>{
 
       {/* Top 3 Last Night — always from most recent session overall */}
       {(() => {
@@ -451,7 +444,7 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
       </div>
 
       {/* Year filter */}
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
         {[...years, 'all'].map(y => (
           <button key={y} onClick={() => setYearFilter(y)} className="btn-ghost"
             style={{
@@ -465,6 +458,12 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
           </button>
         ))}
       </div>
+
+      {/* Monatsabrechnung Button */}
+      <button onClick={() => setShowMonat(true)}
+        style={{ width:'100%', padding:'11px', borderRadius:'10px', border:'1px solid rgba(201,168,76,0.3)', background:'rgba(201,168,76,0.07)', color:'var(--gold)', fontFamily:'Cinzel,serif', fontSize:'0.78rem', letterSpacing:'0.08em', cursor:'pointer', marginBottom:'16px', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px' }}>
+        📊 MONATSABRECHNUNG
+      </button>
 
       {filteredDates.length === 0 && (
         <div className="empty-state">Noch keine Sessions — spiel eine Runde! ♠</div>
@@ -623,7 +622,8 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
         )
       })}
 
-      </>)}
+      })()
+      }
 
       {/* Lightbox — shown in both views */}
       {lightbox && (
