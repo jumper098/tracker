@@ -478,8 +478,13 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
           SPIELER AUSWÄHLEN ({sPlayers.length})
         </div>
         <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
-          {players.map(name => {
+          {[...players].sort((a, b) => {
+            const countA = sessions.filter(s => s.player_name === a).length
+            const countB = sessions.filter(s => s.player_name === b).length
+            return countB - countA
+          }).map(name => {
             const sel = sPlayers.includes(name)
+            const count = sessions.filter(s => s.player_name === name).length
             return (
               <button key={name} onClick={() => setSPlayers(prev => sel ? prev.filter(p => p !== name) : [...prev, name])}
                 style={{ display:'flex', alignItems:'center', gap:'7px', padding:'7px 14px', borderRadius:'20px', cursor:'pointer', fontSize:'0.85rem',
@@ -488,6 +493,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                   color: sel ? 'var(--gold)' : 'var(--text-muted)' }}>
                 <Avatar name={name} avatars={avatars} size={22} />
                 {sel ? '✓ ' : ''}{name}
+                <span style={{ fontSize:'0.6rem', color: sel ? 'rgba(201,168,76,0.6)' : 'rgba(255,255,255,0.2)' }}>{count}×</span>
               </button>
             )
           })}
@@ -501,6 +507,18 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
   )
 
   // ── LIVE VIEW ───────────────────────────────────────────────────────────────
+  async function refreshSession() {
+    try {
+      const { data: metaRow } = await db.from('live_session').select('data').eq('id', 'current').single()
+      if (!metaRow?.data?.meta) return
+      const { data: evRows } = await db.from('live_session_events').select('*').order('created_at', { ascending: true })
+      metaRef.current = metaRow.data.meta
+      eventsRef.current = (evRows || []).map(r => r.event)
+      rebuildSession()
+      showToast('✓ Aktualisiert')
+    } catch (_) { showToast('⚠ Fehler beim Aktualisieren') }
+  }
+
   if (!session) return null
   const totalPot = session.players.reduce((s, p) => s + p.buyin + p.rebuys.reduce((a,r) => a+r, 0), 0)
   const allCashedOut = session.players.every(p => p.cashout !== null)
@@ -536,6 +554,11 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
           <button onClick={drawSeats}
             style={{ flex:1, padding:'8px', borderRadius:'8px', border:'1px solid rgba(167,139,250,0.35)', background:'rgba(167,139,250,0.08)', color:'#a78bfa', fontFamily:'Cinzel,serif', fontSize:'0.7rem', letterSpacing:'0.08em', cursor:'pointer' }}>
             🎲 PLÄTZE
+          </button>
+          <button onClick={refreshSession}
+            style={{ padding:'8px 12px', borderRadius:'8px', border:'1px solid rgba(74,222,128,0.35)', background:'rgba(74,222,128,0.08)', color:'#4ade80', fontSize:'1rem', cursor:'pointer' }}
+            title="Aktualisieren">
+            ↻
           </button>
         </div>
       </div>
