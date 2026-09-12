@@ -340,7 +340,6 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
       })()}
 
       {/* ── EINZELNE SESSIONS VIEW ── */}
-      {(()=>{
 
       {/* Top 3 Last Night — always from most recent session overall */}
       {(() => {
@@ -622,8 +621,6 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
         )
       })}
 
-      })()
-      }
 
       {/* Lightbox — shown in both views */}
       {lightbox && (
