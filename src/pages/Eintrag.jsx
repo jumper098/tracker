@@ -218,47 +218,115 @@ function PlayerOfMonth({ sessions, avatars }) {
 }
 
 // ─── Live Session ────────────────────────────────────────────────────────────
+// Event-basiertes System: Jede Aktion wird als eigenes Event gespeichert.
+// Beim Laden werden alle Events zu einem State zusammengeführt.
+// Dadurch können mehrere Geräte gleichzeitig schreiben ohne sich zu überschreiben.
+
+function applyEvents(meta, events) {
+  // Reconstruct session state from meta + list of events
+  if (!meta) return null
+  const players = meta.players.map(name => ({
+    name,
+    buyin: meta.buyin,
+    rebuys: [],
+    cashout: null,
+    lateJoin: false,
+  }))
+  const playerMap = {}
+  players.forEach(p => { playerMap[p.name] = p })
+
+  events.forEach(ev => {
+    switch (ev.type) {
+      case 'rebuy':
+        if (playerMap[ev.player]) playerMap[ev.player].rebuys.push(ev.amount)
+        break
+      case 'cashout':
+        if (playerMap[ev.player]) playerMap[ev.player].cashout = ev.amount
+        break
+      case 'uncashout':
+        if (playerMap[ev.player]) playerMap[ev.player].cashout = null
+        break
+      case 'add_player':
+        if (!playerMap[ev.player]) {
+          const p = { name: ev.player, buyin: ev.buyin ?? meta.buyin, rebuys: [], cashout: null, lateJoin: true }
+          playerMap[ev.player] = p
+        }
+        break
+      case 'remove_player':
+        delete playerMap[ev.player]
+        break
+    }
+  })
+  return { ...meta, players: Object.values(playerMap) }
+}
+
 function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
   const [session, setSession] = useState(null)
-  const [view, setView] = useState('setup') // setup | live
-  const myId = useRef(Math.random().toString(36).slice(2))
+  const [view, setView] = useState('setup')
   const sessionRef = useRef(null)
   const timerRef = useRef(null)
   const [elapsed, setElapsed] = useState(0)
+  const metaRef = useRef(null)   // session meta (name, date, buyin, startedAt, players[])
+  const eventsRef = useRef([])   // all events
 
-  // Setup state
   const today = new Date().toISOString().split('T')[0]
   const [sName, setSName] = useState('Poker Abend')
   const [sDate, setSDate] = useState(today)
   const [sBuyin, setSBuyin] = useState('20')
   const [sPlayers, setSPlayers] = useState([])
 
-  // Modals
-  const [rebuyModal, setRebuyModal] = useState(null) // player name
+  const [rebuyModal, setRebuyModal] = useState(null)
   const [rebuyAmount, setRebuyAmount] = useState('')
-  const [cashoutModal, setCashoutModal] = useState(null) // player name
+  const [cashoutModal, setCashoutModal] = useState(null)
   const [cashoutValue, setCashoutValue] = useState('')
   const [addPlayerModal, setAddPlayerModal] = useState(false)
   const [addPlayerName, setAddPlayerName] = useState('')
-  const [removeConfirm, setRemoveConfirm] = useState(null) // player name
+  const [removeConfirm, setRemoveConfirm] = useState(null)
   const [endConfirm, setEndConfirm] = useState(false)
   const [seatDrawModal, setSeatDrawModal] = useState(false)
   const [seatResult, setSeatResult] = useState(null)
   const [drawing, setDrawing] = useState(false)
 
+  function rebuildSession() {
+    const s = applyEvents(metaRef.current, eventsRef.current)
+    sessionRef.current = s
+    setSession(s ? { ...s } : null)
+    return s
+  }
+
   // Load existing session on mount
   useEffect(() => {
-    db.from('live_session').select('data').eq('id', 'current').single()
-      .then(({ data }) => {
-        if (data?.data?.session) {
-          const s = data.data.session
-          sessionRef.current = s
-          setSession(s)
-          setView('live')
-          startTimer(s.startedAt)
-        }
-      }).catch(() => {})
+    async function load() {
+      try {
+        const { data: metaRow } = await db.from('live_session').select('data').eq('id', 'current').single()
+        if (!metaRow?.data?.meta) return
+        const { data: evRows } = await db.from('live_session_events').select('*').order('created_at', { ascending: true })
+        metaRef.current = metaRow.data.meta
+        eventsRef.current = (evRows || []).map(r => r.event)
+        const s = rebuildSession()
+        if (s) { setView('live'); startTimer(s.startedAt) }
+      } catch (_) {}
+    }
+    load()
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [])
+
+  // Realtime: listen for new events from other devices
+  useEffect(() => {
+    const channel = db.channel('live_events_rt')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_session_events' }, payload => {
+        const ev = payload.new?.event
+        if (!ev) return
+        eventsRef.current = [...eventsRef.current, ev]
+        rebuildSession()
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'live_session_events' }, () => {
+        // Events cleared = session ended or reset
+        eventsRef.current = []
+        rebuildSession()
+      })
+      .subscribe()
+    return () => db.removeChannel(channel)
   }, [])
 
   function startTimer(startedAt) {
@@ -276,121 +344,62 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
     return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
   }
 
-  async function writeDb(s) {
+  // Write a single event to DB — safe for concurrent writes
+  async function pushEvent(ev) {
+    eventsRef.current = [...eventsRef.current, ev]
+    rebuildSession()
     try {
-      await db.from('live_session').upsert(
-        { id: 'current', data: { session: s, writerId: myId.current }, updated_at: new Date().toISOString() },
-        { onConflict: 'id' }
-      )
-    } catch (_) {}
+      await db.from('live_session_events').insert({ event: ev, created_at: new Date().toISOString() })
+    } catch (e) {
+      showToast('⚠ Sync-Fehler: ' + e.message)
+    }
   }
-
-  function updateSession(updater) {
-    const prev = sessionRef.current
-    if (!prev) return
-    const updated = typeof updater === 'function' ? updater(prev) : updater
-    sessionRef.current = updated
-    setSession(updated)
-    setTimeout(() => writeDb(updated), 0)
-  }
-
-  // Realtime listener
-  useEffect(() => {
-    const channel = db.channel('live_session_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'live_session' }, payload => {
-        const d = payload.new?.data
-        if (!d || d.writerId === myId.current) return
-        if (d.session) {
-          sessionRef.current = d.session
-          setSession(d.session)
-          if (view !== 'live') setView('live')
-        }
-      })
-      .subscribe()
-    return () => db.removeChannel(channel)
-  }, [view])
 
   function startSession() {
     if (!sName || !sBuyin || sPlayers.length < 2) {
       showToast('⚠ Name, Buy-In und mind. 2 Spieler erforderlich'); return
     }
-    const buyin = parseFloat(sBuyin)
-    const startedAt = Date.now()
-    const newSession = {
-      name: sName,
-      date: sDate,
-      buyin,
-      startedAt,
-      players: sPlayers.map(name => ({
-        name,
-        buyin,
-        rebuys: [],
-        cashout: null,
-        joinedAt: startedAt,
-      }))
+    const meta = {
+      name: sName, date: sDate,
+      buyin: parseFloat(sBuyin),
+      startedAt: Date.now(),
+      players: sPlayers,
     }
-    sessionRef.current = newSession
-    setSession(newSession)
+    metaRef.current = meta
+    eventsRef.current = []
+    rebuildSession()
     setView('live')
-    startTimer(startedAt)
-    writeDb(newSession)
-    showToast('♠ Session gestartet!')
+    startTimer(meta.startedAt)
+    db.from('live_session').upsert(
+      { id: 'current', data: { meta }, updated_at: new Date().toISOString() },
+      { onConflict: 'id' }
+    ).then(() => showToast('♠ Session gestartet!'))
   }
 
   function addRebuy(playerName, amount) {
     const amt = parseFloat(amount)
     if (isNaN(amt) || amt <= 0) { showToast('⚠ Ungültiger Betrag'); return }
-    updateSession(prev => ({
-      ...prev,
-      players: prev.players.map(p => p.name === playerName
-        ? { ...p, rebuys: [...p.rebuys, amt] }
-        : p
-      )
-    }))
-    setRebuyModal(null)
-    setRebuyAmount('')
+    pushEvent({ type: 'rebuy', player: playerName, amount: amt, ts: Date.now() })
+    setRebuyModal(null); setRebuyAmount('')
     showToast(`↺ Rebuy für ${playerName}: ${amt}€`)
   }
 
   function setCashout(playerName, value) {
     const amount = parseFloat(value)
     if (isNaN(amount) || amount < 0) { showToast('⚠ Ungültiger Betrag'); return }
-    updateSession(prev => ({
-      ...prev,
-      players: prev.players.map(p => p.name === playerName ? { ...p, cashout: amount } : p)
-    }))
-    setCashoutModal(null)
-    setCashoutValue('')
+    pushEvent({ type: 'cashout', player: playerName, amount, ts: Date.now() })
+    setCashoutModal(null); setCashoutValue('')
     showToast(`✓ Cash-Out für ${playerName}: ${amount}€`)
   }
 
   function removeCashout(playerName) {
-    updateSession(prev => ({
-      ...prev,
-      players: prev.players.map(p => p.name === playerName ? { ...p, cashout: null } : p)
-    }))
+    pushEvent({ type: 'uncashout', player: playerName, ts: Date.now() })
   }
 
   function removePlayer(playerName) {
-    updateSession(prev => ({
-      ...prev,
-      players: prev.players.filter(p => p.name !== playerName)
-    }))
+    pushEvent({ type: 'remove_player', player: playerName, ts: Date.now() })
     setRemoveConfirm(null)
     showToast(`✓ ${playerName} entfernt`)
-  }
-
-  function drawSeats() {
-    const s = sessionRef.current
-    if (!s) return
-    setDrawing(true)
-    setSeatResult(null)
-    setSeatDrawModal(true)
-    setTimeout(() => {
-      const shuffled = [...s.players.map(p => p.name)].sort(() => Math.random() - 0.5)
-      setSeatResult(shuffled.map((name, i) => ({ name, seat: i + 1 })))
-      setDrawing(false)
-    }, 1200)
   }
 
   function addPlayer() {
@@ -400,47 +409,39 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
     if (s.players.find(p => p.name === addPlayerName)) {
       showToast('⚠ Spieler bereits dabei'); return
     }
-    updateSession(prev => ({
-      ...prev,
-      players: [...prev.players, {
-        name: addPlayerName,
-        buyin: prev.buyin,
-        rebuys: [],
-        cashout: null,
-        joinedAt: Date.now(),
-        lateJoin: true,
-      }]
-    }))
-    setAddPlayerModal(false)
-    setAddPlayerName('')
+    pushEvent({ type: 'add_player', player: addPlayerName, buyin: s.buyin, ts: Date.now() })
+    setAddPlayerModal(false); setAddPlayerName('')
     showToast(`✓ ${addPlayerName} ist dazugekommen`)
+  }
+
+  function drawSeats() {
+    const s = sessionRef.current
+    if (!s) return
+    setDrawing(true); setSeatResult(null); setSeatDrawModal(true)
+    setTimeout(() => {
+      const shuffled = [...s.players.map(p => p.name)].sort(() => Math.random() - 0.5)
+      setSeatResult(shuffled.map((name, i) => ({ name, seat: i + 1 })))
+      setDrawing(false)
+    }, 1200)
   }
 
   async function endSession() {
     const s = sessionRef.current
     if (!s) return
-    // Check all cashed out
     const missing = s.players.filter(p => p.cashout === null).map(p => p.name)
-    if (missing.length > 0) {
-      showToast(`⚠ Cash-Out fehlt: ${missing.join(', ')}`); return
-    }
+    if (missing.length > 0) { showToast(`⚠ Cash-Out fehlt: ${missing.join(', ')}`); return }
     const durationSeconds = Math.floor((Date.now() - s.startedAt) / 1000)
-    // Save all players as individual sessions
     const inserts = s.players.map(p => {
       const totalBuyin = p.buyin + p.rebuys.reduce((a, r) => a + r, 0)
       return {
-        date: s.date,
-        player_name: p.name,
-        buy_in: totalBuyin,
-        cash_out: p.cashout,
-        rebuys: p.rebuys.reduce((a, r) => a + r, 0),
-        rebuy_count: p.rebuys.length,
-        session_name: s.name,
-        session_duration: durationSeconds,
+        date: s.date, player_name: p.name, buy_in: totalBuyin,
+        cash_out: p.cashout, rebuys: p.rebuys.reduce((a, r) => a + r, 0),
+        rebuy_count: p.rebuys.length, session_name: s.name, session_duration: durationSeconds,
       }
     })
     const { error } = await db.from('poker_sessions').insert(inserts)
     if (error) { showToast('Fehler: ' + error.message); return }
+    await db.from('live_session_events').delete().neq('id', 0)
     await db.from('live_session').delete().eq('id', 'current')
     if (timerRef.current) clearInterval(timerRef.current)
     showToast('✓ Session gespeichert!')
