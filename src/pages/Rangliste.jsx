@@ -30,22 +30,29 @@ function calcNeighborStats(playerName, seatingHistory, sessions) {
 function NeighborCard({ playerName, seatingHistory, sessions, avatars }) {
   const stats = calcNeighborStats(playerName, seatingHistory, sessions)
   if (stats.length === 0) return null
+  // best = highest winrate, worst = lowest winrate
   const best = stats[0]
   const worst = stats[stats.length - 1]
-  const showBoth = stats.length > 1 && worst.name !== best.name
+  const showBest = best.wr >= 50
+  const showWorst = worst.wr < 50
+  const showBoth = showBest && showWorst && worst.name !== best.name
+  const showOne = !showBoth && (showBest || showWorst)
+  if (!showBest && !showWorst) return null
   return (
     <div style={{ display: 'grid', gridTemplateColumns: showBoth ? '1fr 1fr' : '1fr', gap: '8px', marginBottom: '12px' }}>
-      <div style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '8px', padding: '10px 12px' }}>
-        <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em', marginBottom: '6px' }}>🍀 GLÜCKSNACHBAR</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <Avatar name={best.name} avatars={avatars} size={22} />
-          <div>
-            <div style={{ fontSize: '0.82rem', color: '#4ade80', fontWeight: 600 }}>{best.name}</div>
-            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{best.wr}% · {best.n}×</div>
+      {showBest && (
+        <div style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '8px', padding: '10px 12px' }}>
+          <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em', marginBottom: '6px' }}>🍀 GLÜCKSNACHBAR</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Avatar name={best.name} avatars={avatars} size={22} />
+            <div>
+              <div style={{ fontSize: '0.82rem', color: '#4ade80', fontWeight: 600 }}>{best.name}</div>
+              <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{best.wr}% · {best.n}×</div>
+            </div>
           </div>
         </div>
-      </div>
-      {showBoth && (
+      )}
+      {showWorst && (
         <div style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: '8px', padding: '10px 12px' }}>
           <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', letterSpacing: '0.08em', marginBottom: '6px' }}>💀 PECHVOGEL</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
