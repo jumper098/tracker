@@ -21,6 +21,7 @@ export default function App() {
     setTab(newTab)
   }
   const [sessions, setSessions] = useState([])
+  const [seatingHistory, setSeatingHistory] = useState([])
   const [tournaments, setTournaments] = useState([])
   const [players, setPlayers] = useState(() => {
     const stored = localStorage.getItem('poker_players')
@@ -52,6 +53,8 @@ export default function App() {
 
   async function loadSessions() {
     const { data, error } = await db.from('poker_sessions').select('*').order('date', { ascending: false })
+    const { data: seatingData } = await db.from('seating_history').select('*').order('created_at', { ascending: false })
+    if (seatingData) setSeatingHistory(seatingData)
     if (error) { setStatus('error'); return }
     setSessions(data || [])
     if (data) {
@@ -160,6 +163,7 @@ export default function App() {
           <PageComponent
             sessions={sessions}
             tournaments={tournaments}
+            seatingHistory={seatingHistory}
             players={players}
             avatars={avatars}
             onSessionAdded={loadSessions}
