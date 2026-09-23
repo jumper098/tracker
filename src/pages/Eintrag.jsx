@@ -874,48 +874,76 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                 </div>
               ) : seatResult ? (
                 <>
-                  {/* Poker Table SVG — bigger names and numbers */}
-                  <svg viewBox="0 0 320 320" style={{ width:'100%', maxWidth:'320px', display:'block', margin:'0 auto 16px' }}>
-                    <ellipse cx="160" cy="160" rx="130" ry="130" fill="#1a3a1a" stroke="#2d5a2d" strokeWidth="3"/>
-                    <ellipse cx="160" cy="160" rx="114" ry="114" fill="#1e4620" stroke="#3a7a3a" strokeWidth="1.5"/>
-                    <ellipse cx="160" cy="160" rx="148" ry="148" fill="none" stroke="#4a3000" strokeWidth="14"/>
-                    <text x="160" y="166" textAnchor="middle" fontSize="24" fill="rgba(255,255,255,0.07)" fontFamily="serif">♠</text>
-                    {seatResult.map((p, i) => {
-                      const angle = (2 * Math.PI * i / n) - Math.PI / 2
-                      const px = 160 + 122 * Math.cos(angle)
-                      const py = 160 + 122 * Math.sin(angle)
-                      const isDealer = p.dealer
-                      const labelX = 160 + 152 * Math.cos(angle)
-                      const labelY = 160 + 152 * Math.sin(angle)
-                      return (
-                        <g key={p.name}>
-                          {/* Seat circle */}
-                          <circle cx={px} cy={py} r="22"
-                            fill={isDealer ? 'rgba(201,168,76,0.35)' : 'rgba(167,139,250,0.2)'}
-                            stroke={isDealer ? '#C9A84C' : 'rgba(167,139,250,0.6)'}
-                            strokeWidth={isDealer ? 3 : 2}/>
-                          {/* Seat number — bigger */}
-                          <text x={px} y={py+1} textAnchor="middle" dominantBaseline="middle"
-                            fontSize="14" fontWeight="800"
-                            fill={isDealer ? '#f5d885' : '#c4b5fd'}
-                            fontFamily="serif">{p.seat}</text>
-                          {/* Dealer chip */}
-                          {isDealer && (
-                            <>
-                              <circle cx={px+15} cy={py-15} r="10" fill="#C9A84C" stroke="#8a6a00" strokeWidth="1.5"/>
-                              <text x={px+15} y={py-15} textAnchor="middle" dominantBaseline="middle" fontSize="8" fill="#000" fontWeight="900">D</text>
-                            </>
-                          )}
-                          {/* Name label — bigger and clearer */}
-                          <text x={labelX} y={labelY} textAnchor="middle" dominantBaseline="middle"
-                            fontSize="10" fill={isDealer ? '#f5d885' : 'rgba(255,255,255,0.95)'}
-                            fontWeight="700" fontFamily="sans-serif">
-                            {p.name.length > 8 ? p.name.slice(0,7)+'…' : p.name}
-                          </text>
-                        </g>
-                      )
-                    })}
-                  </svg>
+                  {/* Poker Table — SVG table + overlaid avatars via foreignObject */}
+                  <div style={{ position:'relative', width:'100%', maxWidth:'320px', margin:'0 auto 16px' }}>
+                    <svg viewBox="0 0 320 320" style={{ width:'100%', display:'block' }}>
+                      <defs>
+                        {seatResult.map((p, i) => (
+                          <clipPath key={`clip-${p.name}`} id={`clip-${i}`}>
+                            <circle cx="0" cy="0" r="16"/>
+                          </clipPath>
+                        ))}
+                      </defs>
+                      <ellipse cx="160" cy="160" rx="130" ry="130" fill="#1a3a1a" stroke="#2d5a2d" strokeWidth="3"/>
+                      <ellipse cx="160" cy="160" rx="114" ry="114" fill="#1e4620" stroke="#3a7a3a" strokeWidth="1.5"/>
+                      <ellipse cx="160" cy="160" rx="148" ry="148" fill="none" stroke="#4a3000" strokeWidth="14"/>
+                      <text x="160" y="166" textAnchor="middle" fontSize="24" fill="rgba(255,255,255,0.07)" fontFamily="serif">♠</text>
+                      {seatResult.map((p, i) => {
+                        const angle = (2 * Math.PI * i / n) - Math.PI / 2
+                        const px = 160 + 116 * Math.cos(angle)
+                        const py = 160 + 116 * Math.sin(angle)
+                        const isDealer = p.dealer
+                        const labelX = 160 + 152 * Math.cos(angle)
+                        const labelY = 160 + 152 * Math.sin(angle)
+                        const avatarUrl = avatars?.[p.name]
+                        return (
+                          <g key={p.name}>
+                            {/* Avatar background circle */}
+                            <circle cx={px} cy={py} r="20"
+                              fill={isDealer ? '#3a2a00' : '#1a1040'}
+                              stroke={isDealer ? '#C9A84C' : 'rgba(167,139,250,0.6)'}
+                              strokeWidth={isDealer ? 3 : 2}/>
+                            {/* Avatar image if available */}
+                            {avatarUrl ? (
+                              <image href={avatarUrl} x={px-16} y={py-16} width="32" height="32"
+                                clipPath={`url(#clip-${i})`}
+                                transform={`translate(${px},${py}) translate(-${px},-${py})`}
+                                preserveAspectRatio="xMidYMid slice"/>
+                            ) : (
+                              /* Initials fallback */
+                              <text x={px} y={py+1} textAnchor="middle" dominantBaseline="middle"
+                                fontSize="11" fontWeight="800"
+                                fill={isDealer ? '#f5d885' : '#c4b5fd'}
+                                fontFamily="sans-serif">
+                                {p.name.slice(0,2).toUpperCase()}
+                              </text>
+                            )}
+                            {/* Seat number badge — bottom right of circle */}
+                            <circle cx={px+14} cy={py+14} r="9"
+                              fill={isDealer ? '#C9A84C' : '#5b21b6'}
+                              stroke="#0a0a0c" strokeWidth="1.5"/>
+                            <text x={px+14} y={py+15} textAnchor="middle" dominantBaseline="middle"
+                              fontSize="8" fontWeight="900"
+                              fill={isDealer ? '#000' : '#fff'}
+                              fontFamily="serif">{p.seat}</text>
+                            {/* Dealer chip */}
+                            {isDealer && (
+                              <>
+                                <circle cx={px-14} cy={py-14} r="9" fill="#C9A84C" stroke="#8a6a00" strokeWidth="1.5"/>
+                                <text x={px-14} y={py-14} textAnchor="middle" dominantBaseline="middle" fontSize="7" fill="#000" fontWeight="900">D</text>
+                              </>
+                            )}
+                            {/* Name label outside table */}
+                            <text x={labelX} y={labelY} textAnchor="middle" dominantBaseline="middle"
+                              fontSize="10" fill={isDealer ? '#f5d885' : 'rgba(255,255,255,0.95)'}
+                              fontWeight="700" fontFamily="sans-serif">
+                              {p.name.length > 8 ? p.name.slice(0,7)+'…' : p.name}
+                            </text>
+                          </g>
+                        )
+                      })}
+                    </svg>
+                  </div>
 
                   {dealer && (
                     <div style={{ textAlign:'center', marginBottom:'14px', padding:'7px 14px', borderRadius:'10px', background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.3)' }}>
