@@ -465,6 +465,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
         created_at: new Date().toISOString()
       })
       setSeatSaved(true)
+      setSeatDrawModal(false)
       showToast('✓ Sitzordnung gespeichert!')
     } catch (e) { showToast('⚠ Fehler: ' + e.message) }
   }
@@ -824,7 +825,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
 
         function tryClose() {
           if (seatResult && !seatSaved) { setSeatConfirmClose(true) }
-          else { setSeatDrawModal(false); setSeatSaved(false); setDragIdx(null) }
+          else { setSeatDrawModal(false); setDragIdx(null) }
         }
 
         function assignSeat(playerIdx, newSeat) {
@@ -852,7 +853,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                   <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', marginBottom:'20px' }}>Die Sitzordnung wurde noch nicht gespeichert.</div>
                   <div style={{ display:'flex', gap:'10px' }}>
                     <button className="btn-ghost" style={{ flex:1 }} onClick={() => setSeatConfirmClose(false)}>Zurück</button>
-                    <button onClick={() => { setSeatConfirmClose(false); setSeatDrawModal(false); setSeatSaved(false); setDragIdx(null) }}
+                    <button onClick={() => { setSeatConfirmClose(false); setSeatDrawModal(false); setDragIdx(null) }}
                       style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(248,113,113,0.4)', background:'rgba(248,113,113,0.1)', color:'#f87171', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
                       Verwerfen
                     </button>
@@ -964,7 +965,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                 <div style={{ display:'flex', gap:'8px' }}>
                   <button className="btn-ghost" style={{ flex:1 }} onClick={tryClose}>Schließen</button>
-                  <button onClick={() => { setSeatSaved(false); setDragIdx(null); drawSeats() }}
+                  <button onClick={() => { setDragIdx(null); drawSeats() }}
                     style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(167,139,250,0.4)', background:'rgba(167,139,250,0.12)', color:'#a78bfa', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
                     🎲 Nochmal
                   </button>
