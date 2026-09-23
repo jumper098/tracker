@@ -609,9 +609,9 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
               style={{ width:'100%', padding:'11px', borderRadius:'10px', border:'1px solid rgba(96,165,250,0.35)', background:'rgba(96,165,250,0.08)', color:'#60a5fa', fontFamily:'Cinzel,serif', fontSize:'0.8rem', letterSpacing:'0.08em', cursor:'pointer' }}>
               + SPIELER HINZUFÜGEN
             </button>
-            <button onClick={drawSeats}
+            <button onClick={() => seatResult ? setSeatDrawModal(true) : drawSeats()}
               style={{ width:'100%', padding:'11px', borderRadius:'10px', border:'1px solid rgba(167,139,250,0.35)', background:'rgba(167,139,250,0.08)', color:'#a78bfa', fontFamily:'Cinzel,serif', fontSize:'0.8rem', letterSpacing:'0.08em', cursor:'pointer' }}>
-              🎲 PLÄTZE & DEALER
+              🎲 {seatResult ? 'SITZORDNUNG ANZEIGEN' : 'PLÄTZE & DEALER AUSLOSEN'}
             </button>
           </div>
           <button onClick={refreshSession}
@@ -924,6 +924,18 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                     </div>
                   )}
 
+                  {/* Save button right under dealer line */}
+                  {!seatSaved ? (
+                    <button onClick={saveSeatOrder}
+                      style={{ width:'100%', padding:'10px', borderRadius:'10px', border:'1px solid rgba(74,222,128,0.4)', background:'rgba(74,222,128,0.12)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer', letterSpacing:'0.08em', marginBottom:'12px' }}>
+                      💾 SITZORDNUNG SPEICHERN
+                    </button>
+                  ) : (
+                    <div style={{ textAlign:'center', padding:'8px', borderRadius:'10px', background:'rgba(74,222,128,0.08)', border:'1px solid rgba(74,222,128,0.2)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.7rem', marginBottom:'12px' }}>
+                      ✓ Gespeichert
+                    </div>
+                  )}
+
                   {/* Option B: direct seat number picker per player */}
                   <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.55rem', color:'rgba(255,255,255,0.3)', letterSpacing:'0.15em', marginBottom:'8px' }}>SITZPLATZ ANPASSEN</div>
                   <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'14px' }}>
@@ -950,17 +962,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
               ) : null}
 
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {seatResult && !seatSaved && (
-                  <button onClick={saveSeatOrder}
-                    style={{ width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid rgba(74,222,128,0.4)', background:'rgba(74,222,128,0.12)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.78rem', cursor:'pointer', letterSpacing:'0.08em' }}>
-                    💾 SITZORDNUNG SPEICHERN
-                  </button>
-                )}
-                {seatResult && seatSaved && (
-                  <div style={{ textAlign:'center', padding:'10px', borderRadius:'10px', background:'rgba(74,222,128,0.08)', border:'1px solid rgba(74,222,128,0.2)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.72rem' }}>
-                    ✓ Gespeichert
-                  </div>
-                )}
                 <div style={{ display:'flex', gap:'8px' }}>
                   <button className="btn-ghost" style={{ flex:1 }} onClick={tryClose}>Schließen</button>
                   <button onClick={() => { setSeatSaved(false); setDragIdx(null); drawSeats() }}
