@@ -73,17 +73,13 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
     byDate[s.date].push(s)
   })
   const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a))
-  // Calculate which dates are milestones (100th, 200th etc. session night overall)
+  // Milestones: count unique session nights (1 date = 1 session, regardless of players)
+  // Mark every 50th night (50, 100, 150, 200, ...)
   const allSortedDates = [...sortedDates].reverse() // oldest first
   const milestoneNights = new Set()
-  let runningCount = 0
-  allSortedDates.forEach(date => {
-    const prev = runningCount
-    runningCount += byDate[date].length
-    // Check if we crossed a milestone (100, 200, 300...)
-    for (let m = Math.ceil((prev+1)/100)*100; m <= runningCount; m += 100) {
-      if (m % 100 === 0) milestoneNights.add(date)
-    }
+  allSortedDates.forEach((date, i) => {
+    const nightNum = i + 1 // 1-based
+    if (nightNum % 50 === 0) milestoneNights.add(date)
   })
   const yearBadges = calcYearBadges(sessions)
 
@@ -496,13 +492,7 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
         const sessionName = night.find(s => s.session_name)?.session_name
 
         const isMilestone = milestoneNights.has(date)
-        // Which milestone number?
-        const milestoneNum = (() => {
-          if (!isMilestone) return null
-          let count = 0
-          allSortedDates.forEach(d => { if (d <= date) count += byDate[d].length })
-          return Math.floor(count / 100) * 100
-        })()
+        const milestoneNum = isMilestone ? (allSortedDates.indexOf(date) + 1) : null
 
         return (
           <div key={date} className="card" style={{ marginBottom: '12px', padding: '0',
