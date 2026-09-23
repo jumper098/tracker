@@ -874,76 +874,67 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                 </div>
               ) : seatResult ? (
                 <>
-                  {/* Poker Table — SVG table + overlaid avatars via foreignObject */}
-                  <div style={{ position:'relative', width:'100%', maxWidth:'320px', margin:'0 auto 16px' }}>
-                    <svg viewBox="0 0 320 320" style={{ width:'100%', display:'block' }}>
-                      <defs>
-                        {seatResult.map((p, i) => (
-                          <clipPath key={`clip-${p.name}`} id={`clip-${i}`}>
-                            <circle cx="0" cy="0" r="16"/>
-                          </clipPath>
-                        ))}
-                      </defs>
-                      <ellipse cx="160" cy="160" rx="130" ry="130" fill="#1a3a1a" stroke="#2d5a2d" strokeWidth="3"/>
-                      <ellipse cx="160" cy="160" rx="114" ry="114" fill="#1e4620" stroke="#3a7a3a" strokeWidth="1.5"/>
-                      <ellipse cx="160" cy="160" rx="148" ry="148" fill="none" stroke="#4a3000" strokeWidth="14"/>
-                      <text x="160" y="166" textAnchor="middle" fontSize="24" fill="rgba(255,255,255,0.07)" fontFamily="serif">♠</text>
-                      {seatResult.map((p, i) => {
-                        const angle = (2 * Math.PI * i / n) - Math.PI / 2
-                        const px = 160 + 116 * Math.cos(angle)
-                        const py = 160 + 116 * Math.sin(angle)
-                        const isDealer = p.dealer
-                        const labelX = 160 + 152 * Math.cos(angle)
-                        const labelY = 160 + 152 * Math.sin(angle)
-                        const avatarUrl = avatars?.[p.name]
-                        return (
-                          <g key={p.name}>
-                            {/* Avatar background circle */}
-                            <circle cx={px} cy={py} r="20"
-                              fill={isDealer ? '#3a2a00' : '#1a1040'}
-                              stroke={isDealer ? '#C9A84C' : 'rgba(167,139,250,0.6)'}
-                              strokeWidth={isDealer ? 3 : 2}/>
-                            {/* Avatar image if available */}
-                            {avatarUrl ? (
-                              <image href={avatarUrl} x={px-16} y={py-16} width="32" height="32"
-                                clipPath={`url(#clip-${i})`}
-                                transform={`translate(${px},${py}) translate(-${px},-${py})`}
-                                preserveAspectRatio="xMidYMid slice"/>
-                            ) : (
-                              /* Initials fallback */
-                              <text x={px} y={py+1} textAnchor="middle" dominantBaseline="middle"
-                                fontSize="11" fontWeight="800"
-                                fill={isDealer ? '#f5d885' : '#c4b5fd'}
-                                fontFamily="sans-serif">
-                                {p.name.slice(0,2).toUpperCase()}
-                              </text>
-                            )}
-                            {/* Seat number badge — bottom right of circle */}
-                            <circle cx={px+14} cy={py+14} r="9"
-                              fill={isDealer ? '#C9A84C' : '#5b21b6'}
-                              stroke="#0a0a0c" strokeWidth="1.5"/>
-                            <text x={px+14} y={py+15} textAnchor="middle" dominantBaseline="middle"
-                              fontSize="8" fontWeight="900"
-                              fill={isDealer ? '#000' : '#fff'}
-                              fontFamily="serif">{p.seat}</text>
-                            {/* Dealer chip */}
-                            {isDealer && (
-                              <>
-                                <circle cx={px-14} cy={py-14} r="9" fill="#C9A84C" stroke="#8a6a00" strokeWidth="1.5"/>
-                                <text x={px-14} y={py-14} textAnchor="middle" dominantBaseline="middle" fontSize="7" fill="#000" fontWeight="900">D</text>
-                              </>
-                            )}
-                            {/* Name label outside table */}
-                            <text x={labelX} y={labelY} textAnchor="middle" dominantBaseline="middle"
-                              fontSize="10" fill={isDealer ? '#f5d885' : 'rgba(255,255,255,0.95)'}
-                              fontWeight="700" fontFamily="sans-serif">
-                              {p.name.length > 8 ? p.name.slice(0,7)+'…' : p.name}
-                            </text>
-                          </g>
-                        )
-                      })}
-                    </svg>
-                  </div>
+                  {/* Poker Table — SVG + HTML avatar overlays */}
+                  {(() => {
+                    const svgSize = 320
+                    return (
+                      <div style={{ position:'relative', width:'100%', maxWidth:`${svgSize}px`, margin:'0 auto 16px' }}>
+                        <svg viewBox={`0 0 ${svgSize} ${svgSize}`} style={{ width:'100%', display:'block' }}>
+                          <ellipse cx="160" cy="160" rx="130" ry="130" fill="#1a3a1a" stroke="#2d5a2d" strokeWidth="3"/>
+                          <ellipse cx="160" cy="160" rx="114" ry="114" fill="#1e4620" stroke="#3a7a3a" strokeWidth="1.5"/>
+                          <ellipse cx="160" cy="160" rx="148" ry="148" fill="none" stroke="#4a3000" strokeWidth="14"/>
+                          <text x="160" y="166" textAnchor="middle" fontSize="24" fill="rgba(255,255,255,0.07)" fontFamily="serif">♠</text>
+                          {seatResult.map((p, i) => {
+                            const angle = (2 * Math.PI * i / n) - Math.PI / 2
+                            const px = 160 + 116 * Math.cos(angle)
+                            const py = 160 + 116 * Math.sin(angle)
+                            const isDealer = p.dealer
+                            const labelX = 160 + 153 * Math.cos(angle)
+                            const labelY = 160 + 153 * Math.sin(angle)
+                            return (
+                              <g key={p.name}>
+                                {/* Ring around avatar */}
+                                <circle cx={px} cy={py} r="20"
+                                  fill="transparent"
+                                  stroke={isDealer ? '#C9A84C' : 'rgba(167,139,250,0.7)'}
+                                  strokeWidth={isDealer ? 3 : 2}/>
+                                {/* Seat number badge */}
+                                <circle cx={px+14} cy={py+14} r="9" fill={isDealer ? '#C9A84C' : '#5b21b6'} stroke="#0a0a0c" strokeWidth="1.5"/>
+                                <text x={px+14} y={py+15} textAnchor="middle" dominantBaseline="middle" fontSize="8" fontWeight="900" fill={isDealer ? '#000' : '#fff'} fontFamily="serif">{p.seat}</text>
+                                {/* Dealer chip */}
+                                {isDealer && (
+                                  <>
+                                    <circle cx={px-14} cy={py-14} r="9" fill="#C9A84C" stroke="#8a6a00" strokeWidth="1.5"/>
+                                    <text x={px-14} y={py-14} textAnchor="middle" dominantBaseline="middle" fontSize="7" fill="#000" fontWeight="900">D</text>
+                                  </>
+                                )}
+                                {/* Name */}
+                                <text x={labelX} y={labelY} textAnchor="middle" dominantBaseline="middle"
+                                  fontSize="10" fill={isDealer ? '#f5d885' : 'rgba(255,255,255,0.95)'}
+                                  fontWeight="700" fontFamily="sans-serif">
+                                  {p.name.length > 8 ? p.name.slice(0,7)+'…' : p.name}
+                                </text>
+                              </g>
+                            )
+                          })}
+                        </svg>
+                        {/* HTML avatar overlays — rendered on top of SVG */}
+                        {seatResult.map((p, i) => {
+                          const angle = (2 * Math.PI * i / n) - Math.PI / 2
+                          // Convert SVG coords to % of container
+                          const pxRaw = 160 + 116 * Math.cos(angle)
+                          const pyRaw = 160 + 116 * Math.sin(angle)
+                          const left = `${(pxRaw / svgSize) * 100}%`
+                          const top = `${(pyRaw / svgSize) * 100}%`
+                          return (
+                            <div key={p.name} style={{ position:'absolute', left, top, transform:'translate(-50%,-50%)', width:'36px', height:'36px', borderRadius:'50%', overflow:'hidden', pointerEvents:'none' }}>
+                              <Avatar name={p.name} avatars={avatars} size={36} />
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
 
                   {dealer && (
                     <div style={{ textAlign:'center', marginBottom:'14px', padding:'7px 14px', borderRadius:'10px', background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.3)' }}>
@@ -963,25 +954,33 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                     </div>
                   )}
 
-                  {/* Option B: direct seat number picker per player */}
-                  <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.55rem', color:'rgba(255,255,255,0.3)', letterSpacing:'0.15em', marginBottom:'8px' }}>SITZPLATZ ANPASSEN</div>
+                  {/* Up/Down arrow seat editor */}
+                  <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.55rem', color:'rgba(255,255,255,0.3)', letterSpacing:'0.15em', marginBottom:'8px' }}>SITZORDNUNG ANPASSEN</div>
                   <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'14px' }}>
-                    {seatResult.map((p, i) => (
+                    {[...seatResult].sort((a,b) => a.seat - b.seat).map((p, idx, arr) => (
                       <div key={p.name} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', borderRadius:'10px',
                         background: p.dealer ? 'rgba(201,168,76,0.08)' : 'rgba(255,255,255,0.03)',
                         border: `1px solid ${p.dealer ? 'rgba(201,168,76,0.25)' : 'rgba(255,255,255,0.07)'}` }}>
-                        <Avatar name={p.name} avatars={avatars} size={32} />
-                        <div style={{ flex:1, fontSize:'0.88rem', color: p.dealer ? 'var(--gold)' : 'var(--text-primary)', fontWeight: p.dealer ? 600 : 400 }}>
+                        {/* Seat number */}
+                        <div style={{ width:'28px', height:'28px', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, background: p.dealer ? 'rgba(201,168,76,0.2)' : 'rgba(167,139,250,0.15)', border:`1px solid ${p.dealer ? 'rgba(201,168,76,0.5)' : 'rgba(167,139,250,0.4)'}`, fontFamily:'Cinzel,serif', fontSize:'0.8rem', fontWeight:700, color: p.dealer ? 'var(--gold)' : '#a78bfa' }}>
+                          {p.seat}
+                        </div>
+                        <Avatar name={p.name} avatars={avatars} size={30} />
+                        <div style={{ flex:1, fontSize:'0.88rem', color: p.dealer ? 'var(--gold)' : 'var(--text-primary)', fontWeight: p.dealer ? 600 : 400, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                           {p.dealer ? '🃏 ' : ''}{p.name}
                         </div>
-                        {/* Seat number buttons */}
-                        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap', justifyContent:'flex-end' }}>
-                          {Array.from({ length: n }, (_, si) => si + 1).map(num => (
-                            <button key={num} onClick={() => assignSeat(i, num)}
-                              style={{ width:'28px', height:'28px', borderRadius:'6px', fontSize:'0.78rem', fontWeight:'700', fontFamily:'Cinzel,serif', cursor: p.seat === num ? 'default' : 'pointer', border:`1px solid ${p.seat === num ? (p.dealer ? 'rgba(201,168,76,0.7)' : 'rgba(167,139,250,0.7)') : 'rgba(255,255,255,0.1)'}`, background: p.seat === num ? (p.dealer ? 'rgba(201,168,76,0.25)' : 'rgba(167,139,250,0.2)') : 'rgba(255,255,255,0.04)', color: p.seat === num ? (p.dealer ? 'var(--gold)' : '#a78bfa') : 'var(--text-muted)' }}>
-                              {num}
-                            </button>
-                          ))}
+                        {/* Up/Down arrows */}
+                        <div style={{ display:'flex', flexDirection:'column', gap:'3px', flexShrink:0 }}>
+                          <button onClick={() => { if (idx > 0) assignSeat(seatResult.findIndex(s => s.name === p.name), arr[idx-1].seat) }}
+                            disabled={idx === 0}
+                            style={{ width:'28px', height:'26px', borderRadius:'6px', border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.04)', color: idx === 0 ? 'rgba(255,255,255,0.15)' : 'var(--text-primary)', fontSize:'0.9rem', cursor: idx === 0 ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                            ▲
+                          </button>
+                          <button onClick={() => { if (idx < arr.length-1) assignSeat(seatResult.findIndex(s => s.name === p.name), arr[idx+1].seat) }}
+                            disabled={idx === arr.length-1}
+                            style={{ width:'28px', height:'26px', borderRadius:'6px', border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.04)', color: idx === arr.length-1 ? 'rgba(255,255,255,0.15)' : 'var(--text-primary)', fontSize:'0.9rem', cursor: idx === arr.length-1 ? 'default' : 'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                            ▼
+                          </button>
                         </div>
                       </div>
                     ))}
