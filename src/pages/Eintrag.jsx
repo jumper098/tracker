@@ -440,13 +440,18 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
   function drawSeats() {
     const s = sessionRef.current
     if (!s) return
-    setDrawing(true); setSeatResult(null); setSeatDrawModal(true)
+    setSeatDrawModal(true)
+    const isFirstDraw = !seatResult
+    if (isFirstDraw) setDrawing(true)
+    setSeatResult(null)
+    setDragIdx(null)
+    const timeout = isFirstDraw ? 1200 : 0
     setTimeout(() => {
       const shuffled = [...s.players.map(p => p.name)].sort(() => Math.random() - 0.5)
       const dealerIdx = Math.floor(Math.random() * shuffled.length)
       setSeatResult(shuffled.map((name, i) => ({ name, seat: i + 1, dealer: i === dealerIdx })))
       setDrawing(false)
-    }, 1200)
+    }, timeout)
   }
 
   async function saveSeatOrder() {
@@ -638,6 +643,11 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                     </div>
                   ))}
                   {p.lateJoin && <span style={{ fontSize:'0.6rem', color:'#60a5fa', background:'rgba(96,165,250,0.12)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:'4px', padding:'1px 6px' }}>LATE</span>}
+                  {seatResult && seatResult.find(s => s.name === p.name) && (
+                    <span style={{ fontSize:'0.6rem', fontFamily:'Cinzel,serif', color: seatResult.find(s => s.name === p.name)?.dealer ? 'var(--gold)' : '#a78bfa', background: seatResult.find(s => s.name === p.name)?.dealer ? 'rgba(201,168,76,0.15)' : 'rgba(167,139,250,0.12)', border:`1px solid ${seatResult.find(s => s.name === p.name)?.dealer ? 'rgba(201,168,76,0.4)' : 'rgba(167,139,250,0.3)'}`, borderRadius:'4px', padding:'1px 7px' }}>
+                      {seatResult.find(s => s.name === p.name)?.dealer ? '🃏 ' : ''}Platz {seatResult.find(s => s.name === p.name)?.seat}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'2px' }}>
                   Buy-In: {totalBuyin}€
@@ -813,13 +823,13 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
 
         function tryClose() {
           if (seatResult && !seatSaved) { setSeatConfirmClose(true) }
-          else { setSeatDrawModal(false); setSeatResult(null); setSeatSaved(false) }
+          else { setSeatDrawModal(false); setSeatSaved(false) }
         }
 
         return (
           <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.92)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'16px' }}>
 
-            {/* Confirm close dialog */}
+            {/* Confirm discard */}
             {seatConfirmClose && (
               <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10, padding:'24px' }}>
                 <div className="card" style={{ maxWidth:'300px', width:'100%', padding:'24px', textAlign:'center' }}>
@@ -828,7 +838,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                   <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', marginBottom:'20px' }}>Die Sitzordnung wurde noch nicht gespeichert.</div>
                   <div style={{ display:'flex', gap:'10px' }}>
                     <button className="btn-ghost" style={{ flex:1 }} onClick={() => setSeatConfirmClose(false)}>Zurück</button>
-                    <button onClick={() => { setSeatConfirmClose(false); setSeatDrawModal(false); setSeatResult(null); setSeatSaved(false) }}
+                    <button onClick={() => { setSeatConfirmClose(false); setSeatDrawModal(false); setSeatSaved(false) }}
                       style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(248,113,113,0.4)', background:'rgba(248,113,113,0.1)', color:'#f87171', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
                       Verwerfen
                     </button>
@@ -843,6 +853,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                 <button onClick={tryClose} style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'8px', color:'var(--text-muted)', padding:'5px 10px', cursor:'pointer', fontSize:'0.8rem' }}>✕</button>
               </div>
 
+              {/* Only show animation when drawing for first time */}
               {drawing ? (
                 <div style={{ textAlign:'center', padding:'32px 0' }}>
                   <div style={{ fontSize:'2.5rem', animation:'spin 0.4s linear infinite' }}>🎲</div>
@@ -852,7 +863,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
               ) : seatResult ? (
                 <>
                   {/* Poker Table SVG */}
-                  <svg viewBox="0 0 280 280" style={{ width:'100%', maxWidth:'280px', display:'block', margin:'0 auto 12px' }}>
+                  <svg viewBox="0 0 280 280" style={{ width:'100%', maxWidth:'260px', display:'block', margin:'0 auto 12px' }}>
                     <ellipse cx="140" cy="140" rx="115" ry="115" fill="#1a3a1a" stroke="#2d5a2d" strokeWidth="3"/>
                     <ellipse cx="140" cy="140" rx="100" ry="100" fill="#1e4620" stroke="#3a7a3a" strokeWidth="1.5"/>
                     <ellipse cx="140" cy="140" rx="130" ry="130" fill="none" stroke="#4a3000" strokeWidth="12"/>
@@ -862,24 +873,31 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                       const px = 140 + 108 * Math.cos(angle)
                       const py = 140 + 108 * Math.sin(angle)
                       const isDealer = p.dealer
+                      const isSelected = dragIdx === i
                       const labelX = 140 + 135 * Math.cos(angle)
                       const labelY = 140 + 135 * Math.sin(angle)
                       return (
-                        <g key={p.name}>
-                          <circle cx={px} cy={py} r="18"
-                            fill={isDealer ? 'rgba(201,168,76,0.3)' : 'rgba(167,139,250,0.15)'}
-                            stroke={isDealer ? '#C9A84C' : 'rgba(167,139,250,0.5)'}
-                            strokeWidth={isDealer ? 2.5 : 1.5}/>
+                        <g key={p.name} style={{ cursor:'pointer' }} onClick={() => {
+                          if (dragIdx === null) { setDragIdx(i) }
+                          else if (dragIdx === i) { setDragIdx(null) }
+                          else { handleDragSeat(dragIdx, i); setDragIdx(null) }
+                        }}>
+                          <circle cx={px} cy={py} r="20"
+                            fill={isSelected ? 'rgba(96,165,250,0.4)' : isDealer ? 'rgba(201,168,76,0.3)' : 'rgba(167,139,250,0.15)'}
+                            stroke={isSelected ? '#60a5fa' : isDealer ? '#C9A84C' : 'rgba(167,139,250,0.5)'}
+                            strokeWidth={isSelected ? 3 : isDealer ? 2.5 : 1.5}/>
                           <text x={px} y={py+1} textAnchor="middle" dominantBaseline="middle"
-                            fontSize="10" fontWeight="700" fill={isDealer ? '#C9A84C' : '#a78bfa'} fontFamily="serif">{p.seat}</text>
+                            fontSize="10" fontWeight="700"
+                            fill={isSelected ? '#60a5fa' : isDealer ? '#C9A84C' : '#a78bfa'}
+                            fontFamily="serif">{p.seat}</text>
                           {isDealer && (
                             <>
-                              <circle cx={px+12} cy={py-12} r="8" fill="#C9A84C" stroke="#8a6a00" strokeWidth="1.5"/>
-                              <text x={px+12} y={py-12} textAnchor="middle" dominantBaseline="middle" fontSize="7" fill="#000" fontWeight="900">D</text>
+                              <circle cx={px+13} cy={py-13} r="8" fill="#C9A84C" stroke="#8a6a00" strokeWidth="1.5"/>
+                              <text x={px+13} y={py-13} textAnchor="middle" dominantBaseline="middle" fontSize="7" fill="#000" fontWeight="900">D</text>
                             </>
                           )}
                           <text x={labelX} y={labelY} textAnchor="middle" dominantBaseline="middle"
-                            fontSize="7.5" fill={isDealer ? '#f5d885' : 'rgba(255,255,255,0.8)'}
+                            fontSize="7.5" fill={isSelected ? '#93c5fd' : isDealer ? '#f5d885' : 'rgba(255,255,255,0.8)'}
                             fontWeight={isDealer ? '700' : '400'} fontFamily="sans-serif">
                             {p.name.length > 7 ? p.name.slice(0,6)+'…' : p.name}
                           </text>
@@ -888,37 +906,18 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                     })}
                   </svg>
 
+                  {/* Tap hint */}
+                  <div style={{ textAlign:'center', marginBottom:'10px', fontSize:'0.65rem', color:'var(--text-muted)' }}>
+                    {dragIdx !== null
+                      ? `"${seatResult[dragIdx].name}" ausgewählt — tippe auf einen anderen Platz zum Tauschen`
+                      : 'Tippe auf einen Platz zum Auswählen'}
+                  </div>
+
                   {dealer && (
                     <div style={{ textAlign:'center', marginBottom:'12px', padding:'6px 14px', borderRadius:'10px', background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.3)' }}>
                       <span style={{ fontFamily:'Cinzel,serif', fontSize:'0.75rem', color:'var(--gold)' }}>🃏 DEALER: {dealer.name} — Platz {dealer.seat}</span>
                     </div>
                   )}
-
-                  {/* Drag & Drop List */}
-                  <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.55rem', color:'rgba(255,255,255,0.3)', letterSpacing:'0.15em', marginBottom:'8px' }}>REIHENFOLGE ANPASSEN — ZIEHEN ZUM TAUSCHEN</div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'14px' }}>
-                    {seatResult.map((p, i) => (
-                      <div key={p.name}
-                        draggable
-                        onDragStart={() => setDragIdx(i)}
-                        onDragOver={e => { e.preventDefault(); setDragOverIdx(i) }}
-                        onDrop={() => { handleDragSeat(dragIdx, i); setDragIdx(null); setDragOverIdx(null) }}
-                        onDragEnd={() => { setDragIdx(null); setDragOverIdx(null) }}
-                        style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', borderRadius:'10px', cursor:'grab',
-                          background: dragOverIdx === i ? 'rgba(167,139,250,0.15)' : p.dealer ? 'rgba(201,168,76,0.1)' : 'rgba(255,255,255,0.03)',
-                          border: `1px solid ${dragOverIdx === i ? 'rgba(167,139,250,0.5)' : p.dealer ? 'rgba(201,168,76,0.35)' : 'rgba(255,255,255,0.07)'}`,
-                          transform: dragIdx === i ? 'scale(0.97)' : 'scale(1)', transition:'all 0.15s',
-                          opacity: dragIdx === i ? 0.5 : 1 }}>
-                        <div style={{ color:'rgba(255,255,255,0.2)', fontSize:'1rem', flexShrink:0 }}>⠿</div>
-                        <div style={{ width:'28px', height:'28px', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
-                          background: p.dealer ? 'rgba(201,168,76,0.25)' : 'rgba(167,139,250,0.15)',
-                          fontFamily:'Cinzel,serif', fontSize:'0.8rem', fontWeight:700,
-                          color: p.dealer ? 'var(--gold)' : '#a78bfa', flexShrink:0 }}>{p.seat}</div>
-                        <div style={{ flex:1, fontSize:'0.88rem', color: p.dealer ? 'var(--gold)' : 'var(--text-primary)' }}>{p.name}</div>
-                        {p.dealer && <div style={{ fontSize:'0.7rem', background:'rgba(201,168,76,0.2)', border:'1px solid rgba(201,168,76,0.4)', borderRadius:'6px', padding:'2px 8px', color:'var(--gold)', fontFamily:'Cinzel,serif' }}>DEALER</div>}
-                      </div>
-                    ))}
-                  </div>
                 </>
               ) : null}
 
@@ -936,12 +935,10 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                 )}
                 <div style={{ display:'flex', gap:'8px' }}>
                   <button className="btn-ghost" style={{ flex:1 }} onClick={tryClose}>Schließen</button>
-                  {seatResult && (
-                    <button onClick={() => { setSeatSaved(false); drawSeats() }}
-                      style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(167,139,250,0.4)', background:'rgba(167,139,250,0.12)', color:'#a78bfa', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
-                      🎲 Nochmal
-                    </button>
-                  )}
+                  <button onClick={() => { setSeatSaved(false); setDragIdx(null); drawSeats() }}
+                    style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(167,139,250,0.4)', background:'rgba(167,139,250,0.12)', color:'#a78bfa', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
+                    🎲 Nochmal
+                  </button>
                 </div>
               </div>
             </div>
