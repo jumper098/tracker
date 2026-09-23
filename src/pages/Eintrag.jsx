@@ -942,6 +942,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                       <div key={p.name} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', borderRadius:'10px',
                         background: p.dealer ? 'rgba(201,168,76,0.08)' : 'rgba(255,255,255,0.03)',
                         border: `1px solid ${p.dealer ? 'rgba(201,168,76,0.25)' : 'rgba(255,255,255,0.07)'}` }}>
+                        <Avatar name={p.name} avatars={avatars} size={32} />
                         <div style={{ flex:1, fontSize:'0.88rem', color: p.dealer ? 'var(--gold)' : 'var(--text-primary)', fontWeight: p.dealer ? 600 : 400 }}>
                           {p.dealer ? '🃏 ' : ''}{p.name}
                         </div>
