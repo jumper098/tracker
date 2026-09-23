@@ -290,6 +290,10 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
   const [seatDrawModal, setSeatDrawModal] = useState(false)
   const [seatResult, setSeatResult] = useState(null)
   const [drawing, setDrawing] = useState(false)
+  const [seatConfirmClose, setSeatConfirmClose] = useState(false)
+  const [seatSaved, setSeatSaved] = useState(false)
+  const [dragIdx, setDragIdx] = useState(null)
+  const [dragOverIdx, setDragOverIdx] = useState(null)
 
   function rebuildSession() {
     const s = applyEvents(metaRef.current, eventsRef.current)
@@ -423,6 +427,12 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
       showToast('⚠ Spieler bereits dabei'); return
     }
     pushEvent({ type: 'add_player', player: addPlayerName, buyin: s.buyin, ts: Date.now() })
+    // Add to seat result if exists
+    if (seatResult) {
+      const nextSeat = Math.max(...seatResult.map(p => p.seat)) + 1
+      setSeatResult(prev => [...(prev||[]), { name: addPlayerName, seat: nextSeat, dealer: false }])
+      setSeatSaved(false)
+    }
     setAddPlayerModal(false); setAddPlayerName('')
     showToast(`✓ ${addPlayerName} ist dazugekommen`)
   }
@@ -437,6 +447,34 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
       setSeatResult(shuffled.map((name, i) => ({ name, seat: i + 1, dealer: i === dealerIdx })))
       setDrawing(false)
     }, 1200)
+  }
+
+  async function saveSeatOrder() {
+    const s = sessionRef.current
+    if (!s || !seatResult) return
+    try {
+      await db.from('seating_history').insert({
+        session_date: s.date,
+        session_name: s.name,
+        seats: seatResult,
+        created_at: new Date().toISOString()
+      })
+      setSeatSaved(true)
+      showToast('✓ Sitzordnung gespeichert!')
+    } catch (e) { showToast('⚠ Fehler: ' + e.message) }
+  }
+
+  function handleDragSeat(fromIdx, toIdx) {
+    if (fromIdx === toIdx || !seatResult) return
+    const updated = [...seatResult]
+    // Swap seats
+    const tmp = updated[fromIdx].seat
+    updated[fromIdx] = { ...updated[fromIdx], seat: updated[toIdx].seat }
+    updated[toIdx] = { ...updated[toIdx], seat: tmp }
+    // Re-sort by seat number
+    updated.sort((a, b) => a.seat - b.seat)
+    setSeatResult(updated)
+    setSeatSaved(false)
   }
 
   async function endSession() {
@@ -772,15 +810,39 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
       {seatDrawModal && (() => {
         const n = seatResult ? seatResult.length : 0
         const dealer = seatResult ? seatResult.find(s => s.dealer) : null
-        const cx = 140, cy = 140, r = 100
+
+        function tryClose() {
+          if (seatResult && !seatSaved) { setSeatConfirmClose(true) }
+          else { setSeatDrawModal(false); setSeatResult(null); setSeatSaved(false) }
+        }
+
         return (
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.92)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'16px' }}
-            onClick={() => { setSeatDrawModal(false); setSeatResult(null) }}>
-            <div className="card" style={{ maxWidth:'340px', width:'100%', padding:'24px' }} onClick={e => e.stopPropagation()}>
-              <div style={{ textAlign:'center', marginBottom:'16px' }}>
-                <div className="font-display" style={{ fontSize:'1rem', color:'#a78bfa', letterSpacing:'0.12em' }}>🎲 PLÄTZE & DEALER</div>
-                <div style={{ fontSize:'0.7rem', color:'var(--text-muted)', marginTop:'4px' }}>{session?.players.length} Spieler</div>
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.92)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'16px' }}>
+
+            {/* Confirm close dialog */}
+            {seatConfirmClose && (
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10, padding:'24px' }}>
+                <div className="card" style={{ maxWidth:'300px', width:'100%', padding:'24px', textAlign:'center' }}>
+                  <div style={{ fontSize:'1.5rem', marginBottom:'8px' }}>⚠️</div>
+                  <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.85rem', color:'var(--gold)', marginBottom:'8px' }}>SITZORDNUNG VERWERFEN?</div>
+                  <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', marginBottom:'20px' }}>Die Sitzordnung wurde noch nicht gespeichert.</div>
+                  <div style={{ display:'flex', gap:'10px' }}>
+                    <button className="btn-ghost" style={{ flex:1 }} onClick={() => setSeatConfirmClose(false)}>Zurück</button>
+                    <button onClick={() => { setSeatConfirmClose(false); setSeatDrawModal(false); setSeatResult(null); setSeatSaved(false) }}
+                      style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(248,113,113,0.4)', background:'rgba(248,113,113,0.1)', color:'#f87171', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
+                      Verwerfen
+                    </button>
+                  </div>
+                </div>
               </div>
+            )}
+
+            <div className="card" style={{ maxWidth:'360px', width:'100%', padding:'24px', maxHeight:'90vh', overflowY:'auto' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+                <div className="font-display" style={{ fontSize:'1rem', color:'#a78bfa', letterSpacing:'0.12em' }}>🎲 PLÄTZE & DEALER</div>
+                <button onClick={tryClose} style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'8px', color:'var(--text-muted)', padding:'5px 10px', cursor:'pointer', fontSize:'0.8rem' }}>✕</button>
+              </div>
+
               {drawing ? (
                 <div style={{ textAlign:'center', padding:'32px 0' }}>
                   <div style={{ fontSize:'2.5rem', animation:'spin 0.4s linear infinite' }}>🎲</div>
@@ -790,15 +852,11 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
               ) : seatResult ? (
                 <>
                   {/* Poker Table SVG */}
-                  <svg viewBox="0 0 280 280" style={{ width:'100%', maxWidth:'280px', display:'block', margin:'0 auto 16px' }}>
-                    {/* Table felt */}
+                  <svg viewBox="0 0 280 280" style={{ width:'100%', maxWidth:'280px', display:'block', margin:'0 auto 12px' }}>
                     <ellipse cx="140" cy="140" rx="115" ry="115" fill="#1a3a1a" stroke="#2d5a2d" strokeWidth="3"/>
                     <ellipse cx="140" cy="140" rx="100" ry="100" fill="#1e4620" stroke="#3a7a3a" strokeWidth="1.5"/>
-                    {/* Table rail */}
                     <ellipse cx="140" cy="140" rx="130" ry="130" fill="none" stroke="#4a3000" strokeWidth="12"/>
-                    {/* Center logo */}
                     <text x="140" y="145" textAnchor="middle" fontSize="20" fill="rgba(255,255,255,0.08)" fontFamily="serif">♠</text>
-                    {/* Players around table */}
                     {seatResult.map((p, i) => {
                       const angle = (2 * Math.PI * i / n) - Math.PI / 2
                       const px = 140 + 108 * Math.cos(angle)
@@ -808,55 +866,90 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                       const labelY = 140 + 135 * Math.sin(angle)
                       return (
                         <g key={p.name}>
-                          {/* Seat circle */}
                           <circle cx={px} cy={py} r="18"
                             fill={isDealer ? 'rgba(201,168,76,0.3)' : 'rgba(167,139,250,0.15)'}
                             stroke={isDealer ? '#C9A84C' : 'rgba(167,139,250,0.5)'}
                             strokeWidth={isDealer ? 2.5 : 1.5}/>
-                          {/* Seat number */}
                           <text x={px} y={py+1} textAnchor="middle" dominantBaseline="middle"
-                            fontSize="10" fontWeight="700" fill={isDealer ? '#C9A84C' : '#a78bfa'}
-                            fontFamily="serif">{p.seat}</text>
-                          {/* Dealer chip */}
+                            fontSize="10" fontWeight="700" fill={isDealer ? '#C9A84C' : '#a78bfa'} fontFamily="serif">{p.seat}</text>
                           {isDealer && (
                             <>
                               <circle cx={px+12} cy={py-12} r="8" fill="#C9A84C" stroke="#8a6a00" strokeWidth="1.5"/>
                               <text x={px+12} y={py-12} textAnchor="middle" dominantBaseline="middle" fontSize="7" fill="#000" fontWeight="900">D</text>
                             </>
                           )}
-                          {/* Name label */}
                           <text x={labelX} y={labelY} textAnchor="middle" dominantBaseline="middle"
                             fontSize="7.5" fill={isDealer ? '#f5d885' : 'rgba(255,255,255,0.8)'}
-                            fontWeight={isDealer ? '700' : '400'}
-                            fontFamily="sans-serif">
+                            fontWeight={isDealer ? '700' : '400'} fontFamily="sans-serif">
                             {p.name.length > 7 ? p.name.slice(0,6)+'…' : p.name}
                           </text>
                         </g>
                       )
                     })}
                   </svg>
-                  {/* Dealer highlight */}
+
                   {dealer && (
-                    <div style={{ textAlign:'center', marginBottom:'12px', padding:'8px 14px', borderRadius:'10px', background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.3)' }}>
+                    <div style={{ textAlign:'center', marginBottom:'12px', padding:'6px 14px', borderRadius:'10px', background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.3)' }}>
                       <span style={{ fontFamily:'Cinzel,serif', fontSize:'0.75rem', color:'var(--gold)' }}>🃏 DEALER: {dealer.name} — Platz {dealer.seat}</span>
                     </div>
                   )}
+
+                  {/* Drag & Drop List */}
+                  <div style={{ fontFamily:'Cinzel,serif', fontSize:'0.55rem', color:'rgba(255,255,255,0.3)', letterSpacing:'0.15em', marginBottom:'8px' }}>REIHENFOLGE ANPASSEN — ZIEHEN ZUM TAUSCHEN</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'14px' }}>
+                    {seatResult.map((p, i) => (
+                      <div key={p.name}
+                        draggable
+                        onDragStart={() => setDragIdx(i)}
+                        onDragOver={e => { e.preventDefault(); setDragOverIdx(i) }}
+                        onDrop={() => { handleDragSeat(dragIdx, i); setDragIdx(null); setDragOverIdx(null) }}
+                        onDragEnd={() => { setDragIdx(null); setDragOverIdx(null) }}
+                        style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 12px', borderRadius:'10px', cursor:'grab',
+                          background: dragOverIdx === i ? 'rgba(167,139,250,0.15)' : p.dealer ? 'rgba(201,168,76,0.1)' : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${dragOverIdx === i ? 'rgba(167,139,250,0.5)' : p.dealer ? 'rgba(201,168,76,0.35)' : 'rgba(255,255,255,0.07)'}`,
+                          transform: dragIdx === i ? 'scale(0.97)' : 'scale(1)', transition:'all 0.15s',
+                          opacity: dragIdx === i ? 0.5 : 1 }}>
+                        <div style={{ color:'rgba(255,255,255,0.2)', fontSize:'1rem', flexShrink:0 }}>⠿</div>
+                        <div style={{ width:'28px', height:'28px', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
+                          background: p.dealer ? 'rgba(201,168,76,0.25)' : 'rgba(167,139,250,0.15)',
+                          fontFamily:'Cinzel,serif', fontSize:'0.8rem', fontWeight:700,
+                          color: p.dealer ? 'var(--gold)' : '#a78bfa', flexShrink:0 }}>{p.seat}</div>
+                        <div style={{ flex:1, fontSize:'0.88rem', color: p.dealer ? 'var(--gold)' : 'var(--text-primary)' }}>{p.name}</div>
+                        {p.dealer && <div style={{ fontSize:'0.7rem', background:'rgba(201,168,76,0.2)', border:'1px solid rgba(201,168,76,0.4)', borderRadius:'6px', padding:'2px 8px', color:'var(--gold)', fontFamily:'Cinzel,serif' }}>DEALER</div>}
+                      </div>
+                    ))}
+                  </div>
                 </>
               ) : null}
-              <div style={{ display:'flex', gap:'10px' }}>
-                <button className="btn-ghost" style={{ flex:1 }} onClick={() => { setSeatDrawModal(false); setSeatResult(null) }}>Schließen</button>
-                {seatResult && (
-                  <button onClick={drawSeats} style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(167,139,250,0.4)', background:'rgba(167,139,250,0.12)', color:'#a78bfa', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
-                    🎲 Nochmal
+
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {seatResult && !seatSaved && (
+                  <button onClick={saveSeatOrder}
+                    style={{ width:'100%', padding:'12px', borderRadius:'10px', border:'1px solid rgba(74,222,128,0.4)', background:'rgba(74,222,128,0.12)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.78rem', cursor:'pointer', letterSpacing:'0.08em' }}>
+                    💾 SITZORDNUNG SPEICHERN
                   </button>
                 )}
+                {seatResult && seatSaved && (
+                  <div style={{ textAlign:'center', padding:'10px', borderRadius:'10px', background:'rgba(74,222,128,0.08)', border:'1px solid rgba(74,222,128,0.2)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.72rem' }}>
+                    ✓ Gespeichert
+                  </div>
+                )}
+                <div style={{ display:'flex', gap:'8px' }}>
+                  <button className="btn-ghost" style={{ flex:1 }} onClick={tryClose}>Schließen</button>
+                  {seatResult && (
+                    <button onClick={() => { setSeatSaved(false); drawSeats() }}
+                      style={{ flex:1, padding:'13px', borderRadius:'10px', border:'1px solid rgba(167,139,250,0.4)', background:'rgba(167,139,250,0.12)', color:'#a78bfa', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
+                      🎲 Nochmal
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         )
       })()}
 
-      {/* End Confirm Modal */}
+            {/* End Confirm Modal */}
       {endConfirm && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:500, padding:'20px' }}
           onClick={() => setEndConfirm(false)}>

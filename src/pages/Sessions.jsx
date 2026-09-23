@@ -73,6 +73,18 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
     byDate[s.date].push(s)
   })
   const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a))
+  // Calculate which dates are milestones (100th, 200th etc. session night overall)
+  const allSortedDates = [...sortedDates].reverse() // oldest first
+  const milestoneNights = new Set()
+  let runningCount = 0
+  allSortedDates.forEach(date => {
+    const prev = runningCount
+    runningCount += byDate[date].length
+    // Check if we crossed a milestone (100, 200, 300...)
+    for (let m = Math.ceil((prev+1)/100)*100; m <= runningCount; m += 100) {
+      if (m % 100 === 0) milestoneNights.add(date)
+    }
+  })
   const yearBadges = calcYearBadges(sessions)
 
 
@@ -483,12 +495,33 @@ export default function Sessions({ sessions, onRefresh, avatars = {} }) {
         })() : null
         const sessionName = night.find(s => s.session_name)?.session_name
 
+        const isMilestone = milestoneNights.has(date)
+        // Which milestone number?
+        const milestoneNum = (() => {
+          if (!isMilestone) return null
+          let count = 0
+          allSortedDates.forEach(d => { if (d <= date) count += byDate[d].length })
+          return Math.floor(count / 100) * 100
+        })()
+
         return (
-          <div key={date} className="card" style={{ marginBottom: '12px', padding: '0' }}>
+          <div key={date} className="card" style={{ marginBottom: '12px', padding: '0',
+            border: isMilestone ? '1.5px solid rgba(201,168,76,0.6)' : undefined,
+            boxShadow: isMilestone ? '0 0 20px rgba(201,168,76,0.15)' : undefined,
+            background: isMilestone ? 'linear-gradient(135deg, rgba(201,168,76,0.07) 0%, rgba(10,10,12,0.98) 60%)' : undefined }}>
+            {isMilestone && (
+              <div style={{ background:'linear-gradient(90deg, rgba(201,168,76,0.3), rgba(201,168,76,0.1), rgba(201,168,76,0.3))', padding:'6px 16px', display:'flex', alignItems:'center', gap:'8px', borderBottom:'1px solid rgba(201,168,76,0.2)' }}>
+                <span style={{ fontSize:'1rem' }}>🏆</span>
+                <span style={{ fontFamily:'Cinzel,serif', fontSize:'0.68rem', color:'var(--gold)', letterSpacing:'0.15em' }}>
+                  {milestoneNum}. SESSION — MEILENSTEIN
+                </span>
+                <span style={{ fontSize:'1rem' }}>🏆</span>
+              </div>
+            )}
             <div onClick={() => toggleNight(date)}
               style={{ padding: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div className="font-display" style={{ fontSize: '0.85rem', color: 'var(--gold)', letterSpacing: '0.1em' }}>
+                <div className="font-display" style={{ fontSize: '0.85rem', color: isMilestone ? '#f5d885' : 'var(--gold)', letterSpacing: '0.1em' }}>
                   {sessionName || formatDate(date)}
                   {photoUrl && <span style={{ marginLeft: '8px', fontSize: '0.8rem' }}>📷</span>}
                 </div>
