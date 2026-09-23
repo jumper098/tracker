@@ -821,8 +821,6 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
       {seatDrawModal && (() => {
         const n = seatResult ? seatResult.length : 0
         const dealer = seatResult ? seatResult.find(s => s.dealer) : null
-        const [editingPlayer, setEditingPlayer] = [dragIdx, setDragIdx]
-
         function tryClose() {
           if (seatResult && !seatSaved) { setSeatConfirmClose(true) }
           else { setSeatDrawModal(false); setDragIdx(null) }
