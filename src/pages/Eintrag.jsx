@@ -611,7 +611,7 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
             </button>
             <button onClick={() => seatResult ? setSeatDrawModal(true) : drawSeats()}
               style={{ width:'100%', padding:'11px', borderRadius:'10px', border:'1px solid rgba(167,139,250,0.35)', background:'rgba(167,139,250,0.08)', color:'#a78bfa', fontFamily:'Cinzel,serif', fontSize:'0.8rem', letterSpacing:'0.08em', cursor:'pointer' }}>
-              🎲 {seatResult ? 'SITZORDNUNG ANZEIGEN' : 'PLÄTZE & DEALER AUSLOSEN'}
+              {seatResult ? '🎲 SITZORDNUNG ANZEIGEN' : '🎲 PLÄTZE & DEALER AUSLOSEN'}
             </button>
           </div>
           <button onClick={refreshSession}
