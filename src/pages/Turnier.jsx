@@ -649,7 +649,7 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
 
                   {/* TIMER — scales to available space */}
                   <div style={{ flex:'1 1 0',display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',minHeight:0 }}>
-                    <div style={{ fontSize:'clamp(5rem,14vw,13rem)',color:timerColor,lineHeight:1,letterSpacing:'0.04em',fontVariantNumeric:'tabular-nums' }}>
+                    <div style={{ fontSize:'clamp(4rem,11vw,10rem)',color:timerColor,lineHeight:1,letterSpacing:'0.04em',fontVariantNumeric:'tabular-nums' }}>
                       {timerMin}:{timerSec}
                     </div>
                   </div>
@@ -826,6 +826,8 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                 style={{ padding:'9px 16px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'0.8rem',cursor:'pointer',opacity:lvl===0?0.3:1 }}>◄</button>
               <button onClick={() => { if(lvl<t.blinds.length-1) advanceLevel(t,lvl+1) }} disabled={lvl>=t.blinds.length-1}
                 style={{ padding:'9px 16px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'0.8rem',cursor:'pointer',opacity:lvl>=t.blinds.length-1?0.3:1 }}>►</button>
+              <button onClick={syncFromServer}
+                style={{ padding:'9px 16px',borderRadius:'8px',border:'1px solid rgba(74,222,128,0.3)',background:'rgba(74,222,128,0.08)',color:'#4ade80',fontSize:'1rem',cursor:'pointer' }} title="Synchronisieren">↻</button>
             </div>
           </div>
 
