@@ -628,73 +628,70 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
         const totalBuyin = p.buyin + p.rebuys.reduce((a,r) => a+r, 0)
         const profit = p.cashout !== null ? p.cashout - totalBuyin : null
         const hasCashout = p.cashout !== null
+        const seatInfo = seatResult?.find(s => s.name === p.name)
         return (
-          <div key={p.name} className="card" style={{ marginBottom:'10px', padding:'14px 16px',
-            border:`1px solid ${hasCashout ? 'rgba(74,222,128,0.25)' : 'rgba(255,255,255,0.07)'}`,
-            background: hasCashout ? 'rgba(74,222,128,0.04)' : undefined }}>
-            <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-              <Avatar name={p.name} avatars={avatars} size={38} />
+          <div key={p.name} className="card" style={{ marginBottom:'10px', padding:'16px',
+            border:`1px solid ${hasCashout ? 'rgba(74,222,128,0.3)' : 'rgba(255,255,255,0.08)'}`,
+            background: hasCashout ? 'rgba(74,222,128,0.05)' : undefined }}>
+
+            {/* Top row: Avatar + Name + Info */}
+            <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'12px' }}>
+              <Avatar name={p.name} avatars={avatars} size={48} />
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-                  <span style={{ fontWeight:600, fontSize:'0.95rem' }}>{p.name}</span>
+                <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap', marginBottom:'4px' }}>
+                  <span style={{ fontWeight:700, fontSize:'1.05rem' }}>{p.name}</span>
                   {(yearBadges[p.name] || []).map((b, i) => (
                     <div key={i} style={{ display:'flex', flexDirection:'column', alignItems:'center', lineHeight:1, gap:'2px' }}>
                       <span style={{ fontSize:'0.75rem' }}>{b.emoji}</span>
-                      <span style={{ fontSize:'0.55rem', color:'var(--text-muted)', fontFamily:'Cinzel,serif', fontWeight:600 }}>{b.year}</span>
+                      <span style={{ fontSize:'0.5rem', color:'var(--text-muted)', fontFamily:'Cinzel,serif', fontWeight:600 }}>{b.year}</span>
                     </div>
                   ))}
                   {p.lateJoin && <span style={{ fontSize:'0.6rem', color:'#60a5fa', background:'rgba(96,165,250,0.12)', border:'1px solid rgba(96,165,250,0.3)', borderRadius:'4px', padding:'1px 6px' }}>LATE</span>}
-                  {(() => { const sr = seatResult?.find(s => s.name === p.name); return sr ? (
-                    <span style={{ fontSize:'0.6rem', fontFamily:'Cinzel,serif', color: sr.dealer ? 'var(--gold)' : '#a78bfa', background: sr.dealer ? 'rgba(201,168,76,0.15)' : 'rgba(167,139,250,0.12)', border:`1px solid ${sr.dealer ? 'rgba(201,168,76,0.4)' : 'rgba(167,139,250,0.3)'}`, borderRadius:'4px', padding:'1px 7px' }}>
-                      {sr.dealer ? '🃏 ' : ''}Sitzplatz {sr.seat}
+                  {seatInfo && <span style={{ fontSize:'0.6rem', fontFamily:'Cinzel,serif', color: seatInfo.dealer ? 'var(--gold)' : '#a78bfa', background: seatInfo.dealer ? 'rgba(201,168,76,0.15)' : 'rgba(167,139,250,0.12)', border:`1px solid ${seatInfo.dealer ? 'rgba(201,168,76,0.4)' : 'rgba(167,139,250,0.3)'}`, borderRadius:'4px', padding:'1px 7px' }}>
+                    {seatInfo.dealer ? '🃏 ' : ''}Sitzplatz {seatInfo.seat}
+                  </span>}
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+                  <span style={{ fontSize:'0.85rem', color:'var(--text-muted)' }}>Buy-In: <span style={{ color:'var(--text-primary)', fontWeight:600 }}>{totalBuyin}€</span></span>
+                  {p.rebuys.length > 0 && <span style={{ fontSize:'0.8rem', color:'#f472b6', fontWeight:600 }}>{p.rebuys.length}× Rebuy</span>}
+                  {hasCashout && (
+                    <span style={{ fontSize:'0.85rem', fontFamily:'Cinzel,serif', color: profit > 0 ? '#4ade80' : profit < 0 ? '#f87171' : 'var(--text-muted)', fontWeight:700, marginLeft:'auto' }}>
+                      {profit > 0 ? '+' : ''}{profit}€
                     </span>
-                  ) : null })()}
-                </div>
-                <div style={{ fontSize:'0.72rem', color:'var(--text-muted)', marginTop:'2px' }}>
-                  Buy-In: {totalBuyin}€
-                  {p.rebuys.length > 0 && <span style={{ color:'#f472b6', marginLeft:'6px' }}>{p.rebuys.length}× Rebuy</span>}
-                </div>
-              </div>
-
-              {/* Right side */}
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'6px' }}>
-                {hasCashout ? (
-                  <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                    <div style={{ textAlign:'right' }}>
-                      <div className="font-display" style={{ fontSize:'0.9rem', color:'#4ade80' }}>{p.cashout}€</div>
-                      <div style={{ fontSize:'0.7rem', color: profit > 0 ? '#4ade80' : profit < 0 ? '#f87171' : 'var(--text-muted)' }}>
-                        {profit > 0 ? '+' : ''}{profit}€
-                      </div>
-                    </div>
-                    <button onClick={() => removeCashout(p.name)}
-                      style={{ width:'24px', height:'24px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.05)', color:'var(--text-muted)', fontSize:'0.75rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
-                  </div>
-                ) : (
-                  <button onClick={() => { setCashoutModal(p.name); setCashoutValue('') }}
-                    style={{ padding:'7px 14px', borderRadius:'8px', border:'1px solid rgba(74,222,128,0.4)', background:'rgba(74,222,128,0.1)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.7rem', cursor:'pointer' }}>
-                    Cash-Out
-                  </button>
-                )}
-                <div style={{ display:'flex', gap:'4px' }}>
-                  <button onClick={() => setRebuyModal(p.name)}
-                    style={{ flex:1, padding:'5px 10px', borderRadius:'7px', border:'1px solid rgba(244,114,182,0.35)', background:'rgba(244,114,182,0.08)', color:'#f472b6', fontFamily:'Cinzel,serif', fontSize:'0.65rem', cursor:'pointer' }}>
-                    + Rebuy
-                  </button>
-                  {p.rebuys.length > 0 && (
-                    <button onClick={() => undoRebuy(p.name)}
-                      style={{ padding:'5px 8px', borderRadius:'7px', border:'1px solid rgba(244,114,182,0.2)', background:'rgba(244,114,182,0.04)', color:'rgba(244,114,182,0.5)', fontSize:'0.75rem', cursor:'pointer' }}
-                      title="Letzten Rebuy rückgängig">
-                      ↩
-                    </button>
                   )}
                 </div>
-                {!hasCashout && (
-                  <button onClick={() => setRemoveConfirm(p.name)}
-                    style={{ padding:'5px 8px', borderRadius:'7px', border:'1px solid rgba(248,113,113,0.3)', background:'rgba(248,113,113,0.06)', color:'#f87171', fontFamily:'Cinzel,serif', fontSize:'0.65rem', cursor:'pointer' }}>
-                    ✕
-                  </button>
-                )}
               </div>
+              {hasCashout && (
+                <button onClick={() => removeCashout(p.name)}
+                  style={{ width:'28px', height:'28px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.15)', background:'rgba(255,255,255,0.05)', color:'var(--text-muted)', fontSize:'0.8rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>✕</button>
+              )}
+            </div>
+
+            {/* Bottom row: Action buttons full width */}
+            <div style={{ display:'flex', gap:'8px' }}>
+              {!hasCashout ? (
+                <button onClick={() => { setCashoutModal(p.name); setCashoutValue('') }}
+                  style={{ flex:2, padding:'9px', borderRadius:'8px', border:'1px solid rgba(74,222,128,0.45)', background:'rgba(74,222,128,0.1)', color:'#4ade80', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer', fontWeight:600 }}>
+                  💰 Cash-Out
+                </button>
+              ) : (
+                <div style={{ flex:2, padding:'9px', borderRadius:'8px', background:'rgba(74,222,128,0.06)', border:'1px solid rgba(74,222,128,0.2)', textAlign:'center', fontFamily:'Cinzel,serif', fontSize:'0.75rem', color:'#4ade80' }}>
+                  ✓ {p.cashout}€
+                </div>
+              )}
+              <button onClick={() => setRebuyModal(p.name)}
+                style={{ flex:1, padding:'9px', borderRadius:'8px', border:'1px solid rgba(244,114,182,0.35)', background:'rgba(244,114,182,0.08)', color:'#f472b6', fontFamily:'Cinzel,serif', fontSize:'0.75rem', cursor:'pointer' }}>
+                + Rebuy
+              </button>
+              {p.rebuys.length > 0 && (
+                <button onClick={() => undoRebuy(p.name)}
+                  style={{ padding:'9px 11px', borderRadius:'8px', border:'1px solid rgba(244,114,182,0.2)', background:'rgba(244,114,182,0.04)', color:'rgba(244,114,182,0.5)', fontSize:'0.85rem', cursor:'pointer' }}
+                  title="Letzten Rebuy rückgängig">↩</button>
+              )}
+              {!hasCashout && (
+                <button onClick={() => setRemoveConfirm(p.name)}
+                  style={{ padding:'9px 11px', borderRadius:'8px', border:'1px solid rgba(248,113,113,0.25)', background:'rgba(248,113,113,0.05)', color:'#f87171', fontSize:'0.85rem', cursor:'pointer' }}>✕</button>
+              )}
             </div>
           </div>
         )
@@ -875,11 +872,8 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
               ) : seatResult ? (
                 <>
                   {/* Poker Table — SVG + HTML avatar overlays */}
-                  {(() => {
-                    const svgSize = 320
-                    return (
-                      <div style={{ position:'relative', width:'100%', maxWidth:`${svgSize}px`, margin:'0 auto 16px' }}>
-                        <svg viewBox={`0 0 ${svgSize} ${svgSize}`} style={{ width:'100%', display:'block' }}>
+                  <div style={{ position:'relative', width:'100%', maxWidth:'320px', margin:'0 auto 16px' }}>
+                    <svg viewBox="0 0 320 320" style={{ width:'100%', display:'block' }}>
                           <ellipse cx="160" cy="160" rx="130" ry="130" fill="#1a3a1a" stroke="#2d5a2d" strokeWidth="3"/>
                           <ellipse cx="160" cy="160" rx="114" ry="114" fill="#1e4620" stroke="#3a7a3a" strokeWidth="1.5"/>
                           <ellipse cx="160" cy="160" rx="148" ry="148" fill="none" stroke="#4a3000" strokeWidth="14"/>
@@ -924,17 +918,15 @@ function LiveSession({ players, avatars = {}, sessions = [], onEnd, onBack }) {
                           // Convert SVG coords to % of container
                           const pxRaw = 160 + 116 * Math.cos(angle)
                           const pyRaw = 160 + 116 * Math.sin(angle)
-                          const left = `${(pxRaw / svgSize) * 100}%`
-                          const top = `${(pyRaw / svgSize) * 100}%`
+                          const left = `${(pxRaw / 320) * 100}%`
+                          const top = `${(pyRaw / 320) * 100}%`
                           return (
                             <div key={p.name} style={{ position:'absolute', left, top, transform:'translate(-50%,-50%)', width:'36px', height:'36px', borderRadius:'50%', overflow:'hidden', pointerEvents:'none' }}>
                               <Avatar name={p.name} avatars={avatars} size={36} />
                             </div>
                           )
                         })}
-                      </div>
-                    )
-                  })()}
+                  </div>
 
                   {dealer && (
                     <div style={{ textAlign:'center', marginBottom:'14px', padding:'7px 14px', borderRadius:'10px', background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.3)' }}>
