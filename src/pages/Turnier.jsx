@@ -151,6 +151,25 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
   // Each client has a unique ID — we embed it in writes to ignore our own echoes
   const myId = useRef(Math.random().toString(36).slice(2))
 
+  async function syncFromServer() {
+    try {
+      const { data } = await db.from('live_tournament').select('data, updated_at').eq('id', 'current').single()
+      if (!data?.data?.tournament) return
+      let tournament = data.data.tournament
+      if (!tournament.timerPaused && tournament.timerStartedAt && data.updated_at) {
+        const serverTs = new Date(data.updated_at).getTime()
+        const localTs = Date.now()
+        const skew = localTs - serverTs
+        if (Math.abs(skew) > 500) {
+          tournament = { ...tournament, timerStartedAt: tournament.timerStartedAt + skew }
+        }
+      }
+      tRef.current = tournament
+      setT(tournament)
+      startTimer(tournament)
+    } catch(_) {}
+  }
+
   async function writeDb(tournament) {
     try {
       const serverNow = new Date().toISOString()
@@ -602,9 +621,11 @@ export default function Turnier({ sessions, tournaments, onRefresh, players, ava
                   style={{ padding:'10px 18px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'1rem',cursor:'pointer',opacity:lvl===0?0.3:1 }}>◄</button>
                 <button onClick={()=>{ if(lvl<t.blinds.length-1) advanceLevel(t,lvl+1) }} disabled={lvl>=t.blinds.length-1}
                   style={{ padding:'10px 18px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.12)',background:'rgba(255,255,255,0.05)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'1rem',cursor:'pointer',opacity:lvl>=t.blinds.length-1?0.3:1 }}>►</button>
+                <button onClick={syncFromServer} style={{ padding:'10px 18px',borderRadius:'8px',border:'1px solid rgba(74,222,128,0.3)',background:'rgba(74,222,128,0.08)',color:'#4ade80',fontFamily:'Cinzel,serif',fontSize:'1rem',cursor:'pointer' }} title="Synchronisieren">↻</button>
                 <button onClick={toggleTimer} style={{ padding:'10px 28px',borderRadius:'8px',border:`1px solid ${t.timerPaused?'rgba(74,222,128,0.5)':'rgba(248,113,113,0.4)'}`,background:t.timerPaused?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.1)',color:t.timerPaused?'#4ade80':'#f87171',fontFamily:'Cinzel,serif',fontSize:'0.9rem',cursor:'pointer',letterSpacing:'0.1em' }}>
                   {t.timerPaused ? '▶ WEITER' : '⏸ PAUSE'}
                 </button>
+                <button onClick={syncFromServer} style={{ padding:'10px 18px',borderRadius:'8px',border:'1px solid rgba(74,222,128,0.3)',background:'rgba(74,222,128,0.08)',color:'#4ade80',fontFamily:'Cinzel,serif',fontSize:'1rem',cursor:'pointer' }} title="Synchronisieren">↻</button>
                 <button onClick={()=>setTvMode(false)} style={{ padding:'10px 18px',borderRadius:'8px',border:'1px solid rgba(255,255,255,0.15)',background:'rgba(255,255,255,0.06)',color:'var(--text-muted)',fontFamily:'Cinzel,serif',fontSize:'0.8rem',cursor:'pointer' }}>✕ EXIT</button>
               </div>
             </div>
