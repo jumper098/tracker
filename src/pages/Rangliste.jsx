@@ -334,26 +334,44 @@ export default function Rangliste({ sessions, avatars = {}, seatingHistory = [] 
 
             {/* Always visible */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px' }}>
-              <div style={{ fontSize: i < 3 ? '1.4rem' : '0.9rem', minWidth: '28px', textAlign: 'center', flexShrink: 0 }}>
-                {i < 3 ? MEDALS[i] : `#${i + 1}`}
+              {/* Rank — uniform size for all */}
+              <div style={{ width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: i === 0 ? 'rgba(201,168,76,0.15)' : i === 1 ? 'rgba(148,163,184,0.1)' : i === 2 ? 'rgba(205,127,50,0.1)' : 'rgba(255,255,255,0.05)',
+                border: `1px solid ${i === 0 ? 'rgba(201,168,76,0.4)' : i === 1 ? 'rgba(148,163,184,0.25)' : i === 2 ? 'rgba(205,127,50,0.25)' : 'rgba(255,255,255,0.08)'}` }}>
+                {i < 3
+                  ? <span style={{ fontSize: '1.1rem' }}>{MEDALS[i]}</span>
+                  : <span style={{ fontFamily: 'Cinzel, serif', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)' }}>{i + 1}</span>
+                }
               </div>
-              <Avatar name={p.name} avatars={avatars} size={42} />
+
+              {/* Avatar — larger */}
+              <Avatar name={p.name} avatars={avatars} size={52} />
+
+              {/* Name + badges */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 600, fontSize: '1rem' }}>{p.name}</span>
-                  {(yearBadges[p.name] || []).map((b, i) => (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1, gap: '3px' }}>
-                      <span style={{ fontSize: '0.85rem' }}>{b.emoji}</span>
-                      <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', fontWeight: 600 }}>{b.year}</span>
-                    </div>
-                  ))}
-                </div>
+                <div style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                {(yearBadges[p.name] || []).length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                    {(yearBadges[p.name] || []).map((b, bi) => (
+                      <div key={bi} style={{ display: 'flex', alignItems: 'center', gap: '2px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', padding: '1px 5px' }}>
+                        <span style={{ fontSize: '0.7rem' }}>{b.emoji}</span>
+                        <span style={{ fontSize: '0.58rem', color: 'var(--text-muted)', fontFamily: 'Cinzel, serif', fontWeight: 600 }}>{b.year}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {/* Profit — both values prominent */}
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div className={`font-display ${profitClass(p.profit)}`} style={{ fontSize: '1rem' }}>{formatEuroSign(p.profit)}</div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Ø {formatEuroSign(p.avgProfit)}</div>
+                <div className={`font-display ${profitClass(p.profit)}`} style={{ fontSize: '1.05rem', fontWeight: 700 }}>{formatEuroSign(p.profit)}</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>Ø {formatEuroSign(p.avgProfit)}</div>
               </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginLeft: '4px' }}>{isOpen ? '▲' : '▼'}</div>
+
+              {/* Expand indicator */}
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isOpen ? 'rgba(201,168,76,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${isOpen ? 'rgba(201,168,76,0.3)' : 'rgba(255,255,255,0.08)'}`, flexShrink: 0, color: isOpen ? 'var(--gold)' : 'var(--text-muted)', fontSize: '0.7rem', transition: 'all 0.2s' }}>
+                {isOpen ? '▲' : '▼'}
+              </div>
             </div>
 
             {/* Expanded */}
